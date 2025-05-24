@@ -5,19 +5,24 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.RegularExpressions; // Для парсинга сигнатуры
 using System.Threading.Tasks;
-using System.Windows; // Для MessageBox
+using System.Windows;
 using System.Windows.Input;
-using ApiManagerApp.Services; // Убедитесь, что этот namespace корректен
+using ApiManagerApp.Services;
 using System.Collections.Generic;
-using System.Data; // Для DataTable
+using System.Data;
+using System.Globalization;
+using System.Diagnostics;
+using System.Text.Json.Nodes;
+using System.Text.Encodings.Web;
 
 namespace ApiManagerApp.ViewModels
 {
     public class FilterEntry : INotifyPropertyChanged
     {
-        private string _column;
-        public string Column
+        private string? _column;
+        public string? Column
         {
             get => _column;
             set { _column = value; OnPropertyChanged(); }
@@ -33,15 +38,15 @@ namespace ApiManagerApp.ViewModels
             { "eq", "ne", "gt", "gte", "lt", "lte", "like", "ilike", "startswith", "endswith", "in", "isnull" };
 
 
-        private string _value;
-        public string Value
+        private string? _value;
+        public string? Value
         {
             get => _value;
             set { _value = value; OnPropertyChanged(); }
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
@@ -64,8 +69,8 @@ namespace ApiManagerApp.ViewModels
         public ObservableCollection<ProcedureInfo> Procedures { get; } = new ObservableCollection<ProcedureInfo>();
         public ObservableCollection<FunctionInfo> Functions { get; } = new ObservableCollection<FunctionInfo>();
 
-        private TableSchemaDetail _selectedTableSchema;
-        public TableSchemaDetail SelectedTableSchema
+        private TableSchemaDetail? _selectedTableSchema;
+        public TableSchemaDetail? SelectedTableSchema
         {
             get => _selectedTableSchema;
             set { _selectedTableSchema = value; OnPropertyChanged(); }
@@ -87,6 +92,7 @@ namespace ApiManagerApp.ViewModels
                 }
             }
         }
+        
 
         private string _selectedRoutineName;
         public string SelectedRoutineName
@@ -161,8 +167,8 @@ namespace ApiManagerApp.ViewModels
 
         public ObservableCollection<FilterEntry> DataQueryFilters { get; } = new ObservableCollection<FilterEntry>();
 
-        private DataTable _queriedDataTable;
-        public DataTable QueriedDataTable
+        private DataTable? _queriedDataTable;
+        public DataTable? QueriedDataTable
         {
             get => _queriedDataTable;
             set { _queriedDataTable = value; OnPropertyChanged(); }
@@ -187,11 +193,49 @@ namespace ApiManagerApp.ViewModels
             get => _dataByColumnValue;
             set { _dataByColumnValue = value; OnPropertyChanged(); }
         }
-        private DataTable _queriedByColumnDataTable;
-        public DataTable QueriedByColumnDataTable
+        private DataTable? _queriedByColumnDataTable;
+        public DataTable? QueriedByColumnDataTable
         {
             get => _queriedByColumnDataTable;
             set { _queriedByColumnDataTable = value; OnPropertyChanged(); }
+        }
+
+        private DataTable _routineCallDataTableResult; // Новое свойство для табличного результата
+        public DataTable RoutineCallDataTableResult
+        {
+            get => _routineCallDataTableResult;
+            set { SetProperty(ref _routineCallDataTableResult, value); }
+        }
+
+
+        private object _selectedRoutineItem;
+        public object SelectedRoutineItem
+        {
+            get => _selectedRoutineItem;
+            set
+            {
+                if (SetProperty(ref _selectedRoutineItem, value))
+                {
+                    RoutineCallResult = string.Empty; // Очищаем текстовый результат
+                    RoutineCallDataTableResult = null; // Очищаем табличный результат
+
+                    if (value is ProcedureInfo proc)
+                    {
+                        SelectedRoutineName = proc.Name;
+                        GenerateExamplePayloadForProcedure(proc);
+                    }
+                    else if (value is FunctionInfo func)
+                    {
+                        SelectedRoutineName = func.Name;
+                        GenerateExamplePayloadForFunction(func); // Можно и для функций, если нужно
+                    }
+                    else
+                    {
+                        SelectedRoutineName = null;
+                        RoutineArgumentsInput = "[]"; // Сброс
+                    }
+                }
+            }
         }
 
         public ICommand CheckHealthCommand { get; }
@@ -209,6 +253,7 @@ namespace ApiManagerApp.ViewModels
         public ICommand NextPageCommand { get; }
         public ICommand PreviousPageCommand { get; }
         public ICommand SelectRoutineCommand { get; }
+        public ICommand CallSelectedRoutineCommand { get; }
 
         public MainViewModel()
         {
@@ -219,7 +264,6 @@ namespace ApiManagerApp.ViewModels
             DataQueryTableName = "";
             DataByColumnTableName = "";
 
-            SelectRoutineCommand = new RelayCommand(ExecuteSelectRoutine, CanExecuteSelectRoutine);
             CheckHealthCommand = new RelayCommand(async param => await ExecuteCheckHealthAsync(), param => true);
             LoadTablesCommand = new RelayCommand(async param => await ExecuteLoadTablesAsync(), param => true);
             LoadViewsCommand = new RelayCommand(async param => await ExecuteLoadViewsAsync(), param => true);
@@ -244,41 +288,293 @@ namespace ApiManagerApp.ViewModels
                                                param => QueriedDataTable != null && (DataQueryOffset + DataQueryLimit) < DataQueryTotalCount);
             PreviousPageCommand = new RelayCommand(async param => { DataQueryOffset = Math.Max(0, DataQueryOffset - DataQueryLimit); await ExecuteReadDataAsync(); },
                                                    param => QueriedDataTable != null && DataQueryOffset > 0);
+
+            CallSelectedRoutineCommand = new RelayCommand(
+               async param => await ExecuteCallSelectedRoutineAsync(),
+               param => SelectedRoutineItem != null && !string.IsNullOrWhiteSpace(SelectedRoutineName)
+           );
+        }
+
+        private void GenerateExamplePayloadForProcedure(ProcedureInfo proc)
+        {
+            GeneratePayload(proc?.ArgumentsSignature);
+        }
+
+        private void GenerateExamplePayloadForFunction(FunctionInfo func)
+        {
+            GeneratePayload(func?.ArgumentsSignature);
+        }
+
+        private void GeneratePayload(string argumentsSignature)
+        {
+            if (string.IsNullOrWhiteSpace(argumentsSignature))
+            {
+                RoutineArgumentsInput = "[]";
+                return;
+            }
+
+            // Более надежный парсинг аргументов с учетом возможных пробелов и ключевого слова IN/OUT/INOUT
+            // Пример: "IN p_last_name character varying, p_first_name character varying"
+            // или "p_id integer, p_name text"
+            // или "OUT result_code integer, IN p_input text"
+            var argDefinitions = new List<Tuple<string, string>>(); // Имя параметра, Тип параметра
+            var regex = new Regex(@"(?:(IN|OUT|INOUT)\s+)?([a-zA-Z0-9_]+)\s+([^,]+(?:\[\])?)(?:,|$)", RegexOptions.IgnoreCase);
+            MatchCollection matches = regex.Matches(argumentsSignature);
+
+            foreach (Match match in matches)
+            {
+                if (match.Groups.Count >= 4)
+                {
+                    string direction = match.Groups[1].Value.ToUpperInvariant();
+                    string name = match.Groups[2].Value;
+                    string type = match.Groups[3].Value.Trim();
+
+                    if (direction != "OUT") // Включаем IN и INOUT (или если направление не указано)
+                    {
+                        argDefinitions.Add(Tuple.Create(name, type));
+                    }
+                }
+            }
+
+            if (!argDefinitions.Any())
+            {
+                RoutineArgumentsInput = "[]";
+                return;
+            }
+
+            var exampleValues = new List<object>();
+            foreach (var argDef in argDefinitions)
+            {
+                string paramName = argDef.Item1.ToLowerInvariant();
+                string paramType = argDef.Item2.ToLowerInvariant();
+                object exampleValue = "string_value"; // Значение по умолчанию
+
+                // Определение значения по типу
+                if (paramType.Contains("int") || paramType.Contains("serial") || paramType.Contains("smallint") || paramType.Contains("bigint"))
+                    exampleValue = 0;
+                else if (paramType.Contains("numeric") || paramType.Contains("decimal") || paramType.Contains("real") || paramType.Contains("double"))
+                    exampleValue = 0.0;
+                else if (paramType.Contains("bool"))
+                    exampleValue = false;
+                else if (paramType.Contains("date")) // Для типа DATE
+                    exampleValue = DateTime.Now.ToString("yyyy-MM-dd");
+                else if (paramType.Contains("timestamp") || paramType.Contains("time")) // Для TIMESTAMP или TIME
+                    exampleValue = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
+                else if (paramType.Contains("uuid"))
+                    exampleValue = Guid.NewGuid().ToString();
+                else if (paramType.Contains("json"))
+                    exampleValue = new JsonObject(); // Пустой JSON объект как пример
+                else if (paramType.Contains("bytea"))
+                    exampleValue = "base64_encoded_bytes";
+                else if (paramType.EndsWith("[]")) // Массив
+                    exampleValue = new List<object>(); // Пустой массив как пример
+
+
+                // Определение значения по имени параметра (переопределяет значение по типу, если найдено совпадение)
+                if (paramName.Contains("name"))
+                {
+                    if (paramName.Contains("first")) exampleValue = "John";
+                    else if (paramName.Contains("last")) exampleValue = "Doe";
+                    else if (paramName.Contains("middle")) exampleValue = "M";
+                    else if (paramName.Contains("user")) exampleValue = "username";
+                    else exampleValue = "Default Name";
+                }
+                else if (paramName.Contains("email"))
+                    exampleValue = "email@example.com";
+                else if (paramName.Contains("phone"))
+                    exampleValue = "+1234567890";
+                else if (paramName.Contains("password"))
+                    exampleValue = "P@$$wOrd";
+                else if (paramName.Contains("date")) // Более точное для имен, содержащих "date"
+                {
+                    if (paramName.Contains("birth")) exampleValue = new DateTime(1990, 1, 1).ToString("yyyy-MM-dd");
+                    else if (paramName.Contains("start")) exampleValue = DateTime.Now.ToString("yyyy-MM-dd");
+                    else if (paramName.Contains("end")) exampleValue = DateTime.Now.AddDays(7).ToString("yyyy-MM-dd");
+                    else if (paramName.Contains("hire")) exampleValue = DateTime.Now.ToString("yyyy-MM-dd");
+                    else if (paramType == "date") exampleValue = DateTime.Now.ToString("yyyy-MM-dd"); // если тип date, но имя не уточнено
+                    else exampleValue = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"); // если тип timestamp, но имя не уточнено
+                }
+                else if (paramName.Contains("id"))
+                {
+                    if (paramType.Contains("int") || paramType.Contains("serial")) exampleValue = 1; // Для ID обычно целое число
+                    else if (paramType.Contains("uuid")) exampleValue = Guid.NewGuid().ToString();
+                    else exampleValue = "id_value";
+                }
+                else if (paramName.Contains("status"))
+                    exampleValue = "active";
+                else if (paramName.Contains("passport"))
+                    exampleValue = "AB123456";
+                else if (paramName.Contains("p_plain_password")) // Конкретный случай из вашего примера
+                    exampleValue = "SecurePassword123!";
+                else if (paramName.EndsWith("_str") && paramType.Contains("char")) // Если параметр оканчивается на _str и тип character varying
+                {
+                    if (paramName.Contains("date")) exampleValue = DateTime.Now.ToString("yyyy-MM-dd"); // Если имя содержит date, но тип varchar
+                    // Можно добавить другие эвристики для _str параметров
+                }
+
+
+                exampleValues.Add(exampleValue);
+            }
+
+            try
+            {
+                // ИЗМЕНЕНИЕ ЗДЕСЬ: Добавляем Encoder для корректного отображения кириллицы
+                RoutineArgumentsInput = JsonSerializer.Serialize(exampleValues,
+                    new JsonSerializerOptions
+                    {
+                        WriteIndented = true,
+                        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping // <--- Вот это важно!
+                    });
+            }
+            catch
+            {
+                RoutineArgumentsInput = "[]"; // В случае ошибки сериализации
+            }
+        }
+
+        private async Task ExecuteCallSelectedRoutineAsync()
+        {
+            if (SelectedRoutineItem == null || string.IsNullOrWhiteSpace(SelectedRoutineName))
+            {
+                ApiStatusMessage = "Please select a routine.";
+                RoutineCallResult = "No routine selected.";
+                RoutineCallDataTableResult = null;
+                return;
+            }
+
+            string routineType = SelectedRoutineItem is ProcedureInfo ? "процедура" : "функция";
+            ApiStatusMessage = $"Calling {routineType} {SelectedRoutineName}...";
+            RoutineCallResult = "";
+            RoutineCallDataTableResult = null;
+
+            RoutineCallArgs payload = new RoutineCallArgs();
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(RoutineArgumentsInput))
+                {
+                    var parsedArgs = JsonSerializer.Deserialize<List<object>>(RoutineArgumentsInput, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (parsedArgs != null)
+                    {
+                        for (int i = 0; i < parsedArgs.Count; i++)
+                        {
+                            if (parsedArgs[i] is JsonElement el && el.ValueKind == JsonValueKind.Number)
+                            {
+                                if (el.TryGetInt64(out long lVal)) parsedArgs[i] = lVal;
+                            }
+                        }
+                        payload.Args = parsedArgs;
+                    }
+                }
+            }
+            catch (JsonException jsonEx)
+            {
+                ApiStatusMessage = $"Warning: Could not parse arguments as JSON array: {jsonEx.Message}. Sending empty args.";
+                RoutineCallResult = $"Argument parsing error: {jsonEx.Message}";
+            }
+            catch (Exception ex)
+            {
+                ApiStatusMessage = $"Error parsing arguments: {ex.Message}";
+                RoutineCallResult = $"Error parsing arguments: {ex.Message}";
+                return;
+            }
+
+            var (response, errorMessage) = await _apiService.CallRoutineAsync(routineType, SelectedRoutineName, payload);
+
+            if (response != null)
+            {
+                ApiStatusMessage = $"{routineType} '{SelectedRoutineName}' called successfully.";
+                if (response.Result.ValueKind != JsonValueKind.Undefined && response.Result.ValueKind != JsonValueKind.Null)
+                {
+                    // Проверяем, является ли результат табличным для функций
+                    if (SelectedRoutineItem is FunctionInfo funcInfo &&
+                        (funcInfo.PreciseReturnType?.ToUpperInvariant().StartsWith("TABLE") == true ||
+                         funcInfo.PreciseReturnType?.ToUpperInvariant().Contains("SETOF RECORD") == true ||
+                         funcInfo.PreciseReturnType?.ToUpperInvariant().Contains("RECORD[]") == true)) // Добавим RECORD[]
+                    {
+                        if (response.Result.ValueKind == JsonValueKind.Array)
+                        {
+                            try
+                            {
+                                var elements = JsonSerializer.Deserialize<List<JsonElement>>(response.Result.GetRawText());
+                                RoutineCallDataTableResult = ConvertJsonElementsToDataTable(elements); // Используем существующий метод
+                                RoutineCallResult = $"Table result displayed below. ({elements?.Count ?? 0} rows)";
+                            }
+                            catch (Exception ex)
+                            {
+                                RoutineCallResult = $"Error converting table result: {ex.Message}\nRaw JSON:\n{JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true })}";
+                                RoutineCallDataTableResult = null;
+                            }
+                        }
+                        else
+                        {
+                            RoutineCallResult = $"Expected array for table result, but got {response.Result.ValueKind}.\nRaw JSON:\n{JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true })}";
+                            RoutineCallDataTableResult = null;
+                        }
+                    }
+                    else // Обычный (не табличный) результат или процедура
+                    {
+                        RoutineCallResult = JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true });
+                        RoutineCallDataTableResult = null;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(response.Status)) // Для процедур
+                {
+                    RoutineCallResult = $"Status: {response.Status}";
+                    if (response.ArgsUsed != null && response.ArgsUsed.Any())
+                    {
+                        RoutineCallResult += $"\nArgs Used: {JsonSerializer.Serialize(response.ArgsUsed, new JsonSerializerOptions { WriteIndented = true })}";
+                    }
+                    RoutineCallDataTableResult = null;
+                }
+                else
+                {
+                    RoutineCallResult = "Routine executed. No specific result data or status returned.";
+                    RoutineCallDataTableResult = null;
+                }
+            }
+            else
+            {
+                ApiStatusMessage = $"Error calling {routineType} {SelectedRoutineName}: {errorMessage}";
+                RoutineCallResult = $"Error: {errorMessage}";
+                RoutineCallDataTableResult = null;
+            }
         }
 
         private async Task ExecuteCheckHealthAsync()
         {
-            ApiStatusMessage = "Checking health...";
-            var (healthInfo, errorMessage) = await _apiService.CheckHealthAsync();
+            ApiStatusMessage = "Проверка соединения...";
+            // Вызываем новый метод с измерением задержки
+            var (healthInfo, latency, errorMessage) = await _apiService.CheckHealthAsyncWithLatency();
+
+            string latencyString = $" (Задержка: {latency.TotalMilliseconds:F0} ms)"; // Форматируем миллисекунды
+
             if (healthInfo != null)
             {
-                HealthStatus = $"API Status: {healthInfo.Status}, DB Connection: {healthInfo.Database_Connection}";
-                ApiStatusMessage = "Health check successful.";
+                HealthStatus = $"API статус: {healthInfo.Status}, DB соединение: {healthInfo.Database_Connection}{latencyString}";
+                ApiStatusMessage = "Проверка соединения успешна.";
             }
             else
             {
-                HealthStatus = $"Health Check Failed: {errorMessage}";
-                ApiStatusMessage = $"Error: {errorMessage}";
+                // Если ошибка, но задержка была измерена (например, сервер ответил ошибкой)
+                if (latency > TimeSpan.Zero || errorMessage.Contains("timed out"))
+                {
+                    HealthStatus = $"Проверка соединения завершилась ошибкой: {errorMessage}{latencyString}";
+                }
+                else // Если ошибка произошла до установления соединения (например, DNS resolving failed)
+                {
+                    HealthStatus = $"Проверка соединения завершилась ошибкой: {errorMessage}";
+                }
+                ApiStatusMessage = $"Ошибка: {errorMessage}";
             }
         }
 
-        private bool CanExecuteSelectRoutine(object parameter)
-        {
-            return parameter is ProcedureInfo || parameter is FunctionInfo;
-        }
 
-        private void ExecuteSelectRoutine(object parameter)
+        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
         {
-            if (parameter is ProcedureInfo proc)
-            {
-                SelectedRoutineName = proc.Name;
-                ApiStatusMessage = $"Procedure '{proc.Name}' selected for execution.";
-            }
-            else if (parameter is FunctionInfo func)
-            {
-                SelectedRoutineName = func.Name;
-                ApiStatusMessage = $"Function '{func.Name}' selected for execution.";
-            }
+            if (Equals(storage, value)) return false;
+            storage = value;
+            OnPropertyChanged(propertyName);
+            return true;
         }
 
         private async Task ExecuteLoadTablesAsync()
@@ -604,7 +900,7 @@ namespace ApiManagerApp.ViewModels
                     return DBNull.Value;
                 case JsonValueKind.Object:
                 case JsonValueKind.Array:
-                    return jsonElement.ToString(); // Отображаем как JSON строку
+                    return jsonElement.ToString();
                 default:
                     return jsonElement.ToString();
             }
@@ -617,20 +913,23 @@ namespace ApiManagerApp.ViewModels
         }
 
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
-            // Обновление состояния команд при изменении зависимых свойств
             switch (propertyName)
             {
                 case nameof(SelectedTableNameForSchema):
                     (LoadTableSchemaCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    // Если DataQueryTableName и DataByColumnTableName привязаны к SelectedTableNameForSchema,
+                    // то их OnPropertyChanged вызовет обновление соответствующих команд.
                     break;
-                case nameof(SelectedRoutineName):
-                    (CallProcedureCommand as RelayCommand)?.RaiseCanExecuteChanged();
-                    (CallFunctionCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                case nameof(SelectedRoutineItem): // Обновлено
+                case nameof(SelectedRoutineName): // SelectedRoutineName обновляется из SelectedRoutineItem
+                    (CallSelectedRoutineCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    // ApiStatusMessage обновляется в сеттере SelectedRoutineItem
+                    Debug.WriteLine($"SelectedRoutineName changed to: {SelectedRoutineName}");
                     break;
                 case nameof(DataQueryTableName):
                     (ReadDataCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -643,7 +942,7 @@ namespace ApiManagerApp.ViewModels
                 case nameof(DataQueryTotalCount):
                 case nameof(DataQueryOffset):
                 case nameof(DataQueryLimit):
-                case nameof(QueriedDataTable): // Также обновляем при появлении данных
+                case nameof(QueriedDataTable):
                     UpdatePaginationCommands();
                     break;
             }

@@ -1,22 +1,15 @@
 // ApiService.cs
-using System;
-using System.Collections.Generic;
+using Microsoft.AspNetCore.WebUtilities;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text; // For StringContent
+using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization; // For JsonPropertyName
-using System.Threading.Tasks;
-using System.Diagnostics;
-// Для .NET Core / .NET 5+ используйте Microsoft.AspNetCore.WebUtilities
-// Установите NuGet пакет: Microsoft.AspNetCore.WebUtilities
-using Microsoft.AspNetCore.WebUtilities;
-// Если вы используете .NET Framework, раскомментируйте System.Web и закомментируйте Microsoft.AspNetCore.WebUtilities
-// using System.Web; 
+using System.Text.Json.Serialization;
+
 
 namespace ApiManagerApp.Services
 {
-    // DTO for Health Check Response
     public class HealthCheckResponse
     {
         [JsonPropertyName("status")]
@@ -26,7 +19,6 @@ namespace ApiManagerApp.Services
         public string Database_Connection { get; set; }
     }
 
-    // DTOs для схемы таблицы/представления
     public class ColumnInfo
     {
         [JsonPropertyName("name")]
@@ -108,7 +100,6 @@ namespace ApiManagerApp.Services
         public PydanticModelsInfo PydanticModels { get; set; }
     }
 
-    // DTO для процедур
     public class ProcedureInfo
     {
         [JsonPropertyName("name")]
@@ -118,7 +109,6 @@ namespace ApiManagerApp.Services
         public string ArgumentsSignature { get; set; }
     }
 
-    // DTO для функций
     public class FunctionInfo
     {
         [JsonPropertyName("name")]
@@ -134,7 +124,6 @@ namespace ApiManagerApp.Services
         public string PreciseReturnType { get; set; }
     }
 
-    // DTO для вызова рутин
     public class RoutineCallArgs
     {
         [JsonPropertyName("args")]
@@ -162,7 +151,6 @@ namespace ApiManagerApp.Services
         public JsonElement Result { get; set; }
     }
 
-    // DTO для ответа при чтении элементов (с пагинацией)
     public class PaginatedDataResponse<T>
     {
         [JsonPropertyName("total_count")]
@@ -181,7 +169,7 @@ namespace ApiManagerApp.Services
     public class ApiService
     {
         private readonly HttpClient _httpClient;
-        private readonly string _baseUrl = "https://api.desperatio.com"; // Замените на ваш URL, если нужно
+        private readonly string _baseUrl = "https://api.desperatio.com";
         private readonly JsonSerializerOptions _jsonSerializerOptions;
 
         public ApiService(string baseUrl = null)
@@ -196,7 +184,6 @@ namespace ApiManagerApp.Services
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/json"));
-            // Устанавливаем таймаут, чтобы приложение не зависало бесконечно
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
 
 
@@ -210,11 +197,11 @@ namespace ApiManagerApp.Services
         {
             try
             {
-                Debug.WriteLine($"GET request: {_httpClient.BaseAddress}{requestUri}");
+                Debug.WriteLine($"GET запрос: {_httpClient.BaseAddress}{requestUri}");
                 HttpResponseMessage response = await _httpClient.GetAsync(requestUri);
                 var responseString = await response.Content.ReadAsStringAsync();
-                Debug.WriteLine($"GET response status: {response.StatusCode}");
-                Debug.WriteLine($"GET response body: {responseString}");
+                Debug.WriteLine($"GET статус ответа: {response.StatusCode}");
+                Debug.WriteLine($"GET тело ответа: {responseString}");
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -223,23 +210,23 @@ namespace ApiManagerApp.Services
                 }
                 else
                 {
-                    return (default, await FormatErrorAsync(response, responseString));
+                    return (default, FormatError(response, responseString));
                 }
             }
             catch (HttpRequestException httpEx)
             {
-                Debug.WriteLine($"HTTP Request Exception for {requestUri}: {httpEx.Message}");
-                return (default, $"Network error: {httpEx.Message} (StatusCode: {httpEx.StatusCode})");
+                Debug.WriteLine($"HTTP исключение запроса для {requestUri}: {httpEx.Message}");
+                return (default, $"Сетевая ошибка: {httpEx.Message} (СтатусКод: {httpEx.StatusCode})");
             }
-            catch (TaskCanceledException ex) // Таймаут или отмена
+            catch (TaskCanceledException ex)
             {
-                Debug.WriteLine($"Request Canceled/Timeout for {requestUri}: {ex.Message}");
-                return (default, ex.InnerException is TimeoutException ? "Request timed out." : $"Request canceled: {ex.Message}");
+                Debug.WriteLine($"Запрос отменен/тайм-аут для {requestUri}: {ex.Message}");
+                return (default, ex.InnerException is TimeoutException ? "Тайм-аут запроса." : $"Запрос отменен: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Generic Exception for {requestUri}: {ex.Message}");
-                return (default, $"An unexpected error occurred: {ex.Message}");
+                Debug.WriteLine($"Общее исключение для {requestUri}: {ex.Message}");
+                return (default, $"Произошла непредвиденная ошибка: {ex.Message}");
             }
         }
 
@@ -250,13 +237,13 @@ namespace ApiManagerApp.Services
                 var jsonPayload = JsonSerializer.Serialize(payload, _jsonSerializerOptions);
                 var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-                Debug.WriteLine($"POST request: {_httpClient.BaseAddress}{requestUri}");
-                Debug.WriteLine($"POST payload: {jsonPayload}");
+                Debug.WriteLine($"POST запрос: {_httpClient.BaseAddress}{requestUri}");
+                Debug.WriteLine($"POST полезная нагрузка: {jsonPayload}");
 
                 HttpResponseMessage response = await _httpClient.PostAsync(requestUri, content);
                 var responseString = await response.Content.ReadAsStringAsync();
-                Debug.WriteLine($"POST response status: {response.StatusCode}");
-                Debug.WriteLine($"POST response body: {responseString}");
+                Debug.WriteLine($"POST статус ответа: {response.StatusCode}");
+                Debug.WriteLine($"POST тело ответа: {responseString}");
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -265,60 +252,81 @@ namespace ApiManagerApp.Services
                 }
                 else
                 {
-                    return (default, await FormatErrorAsync(response, responseString));
+                    return (default, FormatError(response, responseString));
                 }
             }
             catch (HttpRequestException httpEx)
             {
-                Debug.WriteLine($"HTTP Request Exception for {requestUri}: {httpEx.Message}");
-                return (default, $"Network error: {httpEx.Message} (StatusCode: {httpEx.StatusCode})");
+                Debug.WriteLine($"HTTP исключение запроса для {requestUri}: {httpEx.Message}");
+                return (default, $"Сетевая ошибка: {httpEx.Message} (СтатусКод: {httpEx.StatusCode})");
             }
             catch (TaskCanceledException ex)
             {
-                Debug.WriteLine($"Request Canceled/Timeout for {requestUri}: {ex.Message}");
-                return (default, ex.InnerException is TimeoutException ? "Request timed out." : $"Request canceled: {ex.Message}");
+                Debug.WriteLine($"Запрос отменен/тайм-аут для {requestUri}: {ex.Message}");
+                return (default, ex.InnerException is TimeoutException ? "Тайм-аут запроса." : $"Запрос отменен: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Generic Exception for {requestUri}: {ex.Message}");
-                return (default, $"An unexpected error occurred: {ex.Message}");
+                Debug.WriteLine($"Общее исключение для {requestUri}: {ex.Message}");
+                return (default, $"Произошла непредвиденная ошибка: {ex.Message}");
             }
         }
 
-        private async Task<string> FormatErrorAsync(HttpResponseMessage response, string responseString)
+        private string FormatError(HttpResponseMessage response, string responseString)
         {
-            // Попытка десериализовать ошибку, если API возвращает JSON с 'detail'
+            string baseError = $"Ошибка: {response.StatusCode} - {response.ReasonPhrase}.";
+            if (string.IsNullOrWhiteSpace(responseString))
+            {
+                return $"{baseError} (Пустое тело ответа)";
+            }
+
             try
             {
-                // Иногда FastAPI возвращает массив ошибок валидации
-                var validationErrors = JsonSerializer.Deserialize<FastApiValidationErrorWrapper>(responseString, _jsonSerializerOptions);
-                if (validationErrors?.Detail != null && validationErrors.Detail.Any())
+                // Попытка разобрать как ошибку валидации FastAPI
+                var validationErrorWrapper = JsonSerializer.Deserialize<FastApiValidationErrorWrapper>(responseString, _jsonSerializerOptions);
+                if (validationErrorWrapper?.Detail != null && validationErrorWrapper.Detail.Any())
                 {
-                    var errorMessages = validationErrors.Detail.Select(d =>
+                    var errorMessages = validationErrorWrapper.Detail.Select(d =>
                     {
-                        string loc = d.Loc != null && d.Loc.Any() ? string.Join(" -> ", d.Loc.Select(o => o.ToString())) : "N/A";
-                        return $"Field: {loc}, Message: {d.Msg} (Type: {d.Type})";
+                        string loc = d.Loc != null && d.Loc.Any() ? string.Join(" -> ", d.Loc.Select(o => o.ToString())) : "Н/Д";
+                        return $"Поле: {loc}, Сообщение: {d.Msg} (Тип: {d.Type})";
                     });
-                    return $"Validation Error(s): {response.StatusCode} - {string.Join("; ", errorMessages)}";
+                    return $"{baseError}\nДетали валидации:\n{string.Join("\n", errorMessages)}";
                 }
 
-                var errorDetail = JsonSerializer.Deserialize<Dictionary<string, string>>(responseString, _jsonSerializerOptions);
-                if (errorDetail != null && errorDetail.TryGetValue("detail", out var detailMessage))
+                // Попытка разобрать как стандартную ошибку FastAPI с "detail"
+                var errorDetailDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(responseString, _jsonSerializerOptions);
+                if (errorDetailDict != null && errorDetailDict.TryGetValue("detail", out var detailElement))
                 {
-                    return $"Error: {response.StatusCode} - {detailMessage}";
+                    if (detailElement.ValueKind == JsonValueKind.String)
+                    {
+                        return $"{baseError}\nДетали: {detailElement.GetString()}";
+                    }
+                    // Если detail - это объект или массив, выведем его как JSON
+                    return $"{baseError}\nДетали (JSON):\n{JsonSerializer.Serialize(detailElement, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
+                }
+
+                // Если не удалось разобрать как известный формат ошибки, но это валидный JSON
+                using (JsonDocument.Parse(responseString)) // Проверка на валидность JSON
+                {
+                    return $"{baseError}\nОтвет сервера (JSON):\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(responseString), new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
                 }
             }
-            catch (JsonException) { /* Игнорируем ошибку десериализации, используем полный ответ */ }
-
-            return $"Error: {response.StatusCode} - {response.ReasonPhrase}. Response: {responseString.Substring(0, Math.Min(responseString.Length, 200))}"; // Обрезаем длинный ответ
+            catch (JsonException)
+            {
+                // Если это не JSON, выводим как есть (обрезанный)
+                const int maxRawTextLength = 500;
+                string rawText = responseString.Length > maxRawTextLength
+                    ? $"{responseString.Substring(0, maxRawTextLength)}..."
+                    : responseString;
+                return $"{baseError}\nОтвет сервера (текст):\n{rawText}";
+            }
         }
 
-
-        // DTO для ошибок валидации FastAPI
         public class FastApiValidationError
         {
             [JsonPropertyName("loc")]
-            public List<object> Loc { get; set; } // Может содержать строки или числа
+            public List<object> Loc { get; set; }
             [JsonPropertyName("msg")]
             public string Msg { get; set; }
             [JsonPropertyName("type")]
@@ -331,9 +339,57 @@ namespace ApiManagerApp.Services
         }
 
 
-        public async Task<(HealthCheckResponse HealthInfo, string ErrorMessage)> CheckHealthAsync()
+        public async Task<(HealthCheckResponse HealthInfo, TimeSpan Latency, string ErrorMessage)> CheckHealthAsyncWithLatency()
         {
-            return await GetAsync<HealthCheckResponse>("/health");
+            var stopwatch = new Stopwatch();
+            try
+            {
+                Debug.WriteLine($"GET запрос: {_httpClient.BaseAddress}/health");
+                stopwatch.Start();
+                HttpResponseMessage response = await _httpClient.GetAsync("/health");
+                stopwatch.Stop();
+
+                var responseString = await response.Content.ReadAsStringAsync();
+                Debug.WriteLine($"GET /health статус ответа: {response.StatusCode}");
+                Debug.WriteLine($"GET /health тело ответа: {responseString}");
+                Debug.WriteLine($"GET /health задержка: {stopwatch.ElapsedMilliseconds} мс");
+
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var healthInfo = JsonSerializer.Deserialize<HealthCheckResponse>(responseString, _jsonSerializerOptions);
+                    return (healthInfo, stopwatch.Elapsed, null);
+                }
+                else
+                {
+                    return (null, stopwatch.Elapsed, await FormatErrorAsync(response, responseString));
+                }
+            }
+            catch (HttpRequestException httpEx)
+            {
+                stopwatch.Stop();
+                Debug.WriteLine($"Health Check HTTP исключение запроса: {httpEx.Message}");
+                return (null, stopwatch.Elapsed, $"Сетевая ошибка: {httpEx.Message} (СтатусКод: {httpEx.StatusCode})");
+            }
+            catch (TaskCanceledException ex)
+            {
+                stopwatch.Stop();
+                Debug.WriteLine($"Health Check запрос отменен/тайм-аут: {ex.Message}");
+                return (null, stopwatch.Elapsed, ex.InnerException is TimeoutException ? $"Тайм-аут запроса после {stopwatch.ElapsedMilliseconds} мс." : $"Запрос отменен: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                Debug.WriteLine($"Health Check общее исключение: {ex.Message}");
+                return (null, stopwatch.Elapsed, $"Произошла непредвиденная ошибка: {ex.Message}");
+            }
+        }
+
+        private async Task<string> FormatErrorAsync(HttpResponseMessage response, string responseString)
+        {
+            // Логика идентична синхронной версии, просто обернута в Task.FromResult
+            // для совместимости, если бы были асинхронные операции внутри.
+            return await Task.FromResult(FormatError(response, responseString));
         }
 
         public async Task<(List<string> Tables, string ErrorMessage)> GetTablesAsync()
@@ -348,7 +404,7 @@ namespace ApiManagerApp.Services
 
         public async Task<(TableSchemaDetail Schema, string ErrorMessage)> GetTableOrViewSchemaAsync(string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) return (null, "Table/View name cannot be empty.");
+            if (string.IsNullOrWhiteSpace(name)) return (null, "Имя таблицы/представления не может быть пустым.");
             return await GetAsync<TableSchemaDetail>($"/schema/table/{Uri.EscapeDataString(name)}");
         }
 
@@ -364,12 +420,26 @@ namespace ApiManagerApp.Services
 
         public async Task<(RoutineCallResponse Response, string ErrorMessage)> CallRoutineAsync(string routineType, string routineName, RoutineCallArgs payload)
         {
-            if (string.IsNullOrWhiteSpace(routineName)) return (null, "Routine name cannot be empty.");
+            if (string.IsNullOrWhiteSpace(routineName)) return (null, "Имя рутины не может быть пустым.");
             payload ??= new RoutineCallArgs();
 
-            string endpoint = routineType.ToLower() == "procedure"
-                ? $"/routines/procedure/{Uri.EscapeDataString(routineName)}"
-                : $"/routines/function/{Uri.EscapeDataString(routineName)}";
+            string endpointPathSegment;
+            if (routineType.Equals("процедура", StringComparison.OrdinalIgnoreCase) ||
+                routineType.Equals("procedure", StringComparison.OrdinalIgnoreCase))
+            {
+                endpointPathSegment = "procedure";
+            }
+            else if (routineType.Equals("функция", StringComparison.OrdinalIgnoreCase) ||
+                     routineType.Equals("function", StringComparison.OrdinalIgnoreCase))
+            {
+                endpointPathSegment = "function";
+            }
+            else
+            {
+                return (null, $"Неизвестный тип рутины: {routineType}");
+            }
+
+            string endpoint = $"/routines/{endpointPathSegment}/{Uri.EscapeDataString(routineName)}";
 
             return await PostAsync<RoutineCallResponse>(endpoint, payload);
         }
@@ -382,7 +452,7 @@ namespace ApiManagerApp.Services
             string fields = null,
             Dictionary<string, string> filters = null)
         {
-            if (string.IsNullOrWhiteSpace(tableOrViewName)) return (null, "Table/View name cannot be empty.");
+            if (string.IsNullOrWhiteSpace(tableOrViewName)) return (null, "Имя таблицы/представления не может быть пустым.");
 
             var queryParams = new Dictionary<string, string>()
             {
@@ -397,25 +467,13 @@ namespace ApiManagerApp.Services
             {
                 foreach (var filter in filters)
                 {
-                    if (!string.IsNullOrWhiteSpace(filter.Key) && filter.Value != null) // Разрешаем пустую строку для filter.Value
+                    if (!string.IsNullOrWhiteSpace(filter.Key) && filter.Value != null)
                     {
                         queryParams[filter.Key] = filter.Value;
                     }
                 }
             }
-            // Используем Microsoft.AspNetCore.WebUtilities для построения строки запроса
             string requestUri = QueryHelpers.AddQueryString($"/{Uri.EscapeDataString(tableOrViewName)}", queryParams);
-
-            // Для .NET Framework с System.Web:
-            // var queryBuilder = HttpUtility.ParseQueryString(string.Empty);
-            // queryBuilder["limit"] = limit.ToString();
-            // queryBuilder["offset"] = offset.ToString();
-            // if (!string.IsNullOrWhiteSpace(sortBy)) queryBuilder["sort_by"] = sortBy;
-            // if (!string.IsNullOrWhiteSpace(fields)) queryBuilder["fields"] = fields;
-            // if (filters != null) { foreach (var filter in filters) { if (!string.IsNullOrWhiteSpace(filter.Key) && filter.Value != null) queryBuilder[filter.Key] = filter.Value; } }
-            // string queryString = queryBuilder.ToString();
-            // string requestUri = $"/{Uri.EscapeDataString(tableOrViewName)}";
-            // if (!string.IsNullOrEmpty(queryString)) requestUri += $"?{queryString}";
 
             return await GetAsync<PaginatedDataResponse<JsonElement>>(requestUri);
         }
@@ -425,10 +483,9 @@ namespace ApiManagerApp.Services
             string columnName,
             string columnValue)
         {
-            if (string.IsNullOrWhiteSpace(tableOrViewName)) return (null, "Table/View name cannot be empty.");
-            if (string.IsNullOrWhiteSpace(columnName)) return (null, "Column name cannot be empty.");
-            // columnValue может быть null или пустой строкой, это валидно для запроса
-            columnValue ??= string.Empty; // Если null, преобразуем в пустую строку для Uri.EscapeDataString
+            if (string.IsNullOrWhiteSpace(tableOrViewName)) return (null, "Имя таблицы/представления не может быть пустым.");
+            if (string.IsNullOrWhiteSpace(columnName)) return (null, "Имя колонки не может быть пустым.");
+            columnValue ??= string.Empty;
 
             string requestUri = $"/{Uri.EscapeDataString(tableOrViewName)}/column/{Uri.EscapeDataString(columnName)}/{Uri.EscapeDataString(columnValue)}";
             return await GetAsync<List<JsonElement>>(requestUri);

@@ -1,32 +1,33 @@
 // Converters/ObjectPropertyConverter.cs
-using System;
+using ApiManagerApp.Services;
 using System.Globalization;
 using System.Windows.Data;
-using ApiManagerApp.Services; // Для ProcedureInfo, FunctionInfo
 
 namespace ApiManagerApp.Converters
 {
+    // Класс ObjectPropertyConverter реализует интерфейс IValueConverter, 
+    // предоставляя возможность преобразования значения между моделью и представлением (View)
     public class ObjectPropertyConverter : IValueConverter
     {
+        // Метод Convert вызывается при передаче данных из ViewModel в View
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            // Этот конвертер используется для привязки SelectedItem ListView (который является объектом)
-            // к свойству SelectedRoutineName (которое является строкой).
-            // При выборе элемента в ListView, value будет объектом (ProcedureInfo или FunctionInfo).
-            // Мы извлекаем свойство Name.
-            if (value is ProcedureInfo proc) return proc.Name;
-            if (value is FunctionInfo func) return func.Name;
-            return null;
+            // Если значение — объект типа ProcedureInfo, вернуть его имя или пустую строку, если имя null
+            if (value is ProcedureInfo proc) return proc.Name ?? string.Empty;
+
+            // Если значение — объект типа FunctionInfo, вернуть его имя или пустую строку
+            if (value is FunctionInfo func) return func.Name ?? string.Empty;
+
+            // Если объект не соответствует ожидаемым типам — вернуть пустую строку
+            return string.Empty;
         }
 
+        // Метод ConvertBack вызывается при передаче данных из View обратно в ViewModel
+        // Здесь привязка только в одну сторону, поэтому возвращается Binding.DoNothing,
+        // что указывает на то, что обратное преобразование не поддерживается
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            // ConvertBack нужен, если бы мы хотели, чтобы изменение SelectedRoutineName (строки)
-            // выбирало соответствующий объект в ListView. Это сложнее и пока не реализовано.
-            // Для текущего сценария (только чтение из ListView в ViewModel) это не критично.
-            // Если SelectedRoutineName устанавливается программно, ListView не обновится.
-            // Чтобы это работало, нужно было бы найти объект в коллекции Procedures/Functions по имени.
-            return Binding.DoNothing; // Или throw new NotSupportedException();
+            return Binding.DoNothing;
         }
     }
 }
