@@ -1,0 +1,428 @@
+<!-- MainWindow.xaml -->
+<Window x:Class="ApiManagerApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ApiManagerApp"
+        xmlns:viewModels="clr-namespace:ApiManagerApp.ViewModels"
+        xmlns:services="clr-namespace:ApiManagerApp.Services" 
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        mc:Ignorable="d"
+        Title="API Management Tool" Height="800" Width="1200"
+        FontSize="13">
+    <Window.DataContext>
+        <viewModels:MainViewModel/>
+    </Window.DataContext>
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Converters/Converters.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="Button">
+                <Setter Property="Padding" Value="8,4"/>
+                <Setter Property="Margin" Value="3"/>
+                <Setter Property="MinWidth" Value="75"/>
+            </Style>
+            <Style TargetType="TextBox">
+                <Setter Property="Margin" Value="3"/>
+                <Setter Property="Padding" Value="3"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="3"/>
+            </Style>
+            <Style TargetType="ComboBox">
+                <Setter Property="Margin" Value="3"/>
+                <Setter Property="Padding" Value="3"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+            </Style>
+            <Style TargetType="ListView">
+                <Setter Property="Margin" Value="3"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="BorderBrush" Value="LightGray"/>
+            </Style>
+            <Style TargetType="DataGrid">
+                <Setter Property="Margin" Value="3"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="BorderBrush" Value="LightGray"/>
+                <Setter Property="CanUserAddRows" Value="False"/>
+                <Setter Property="CanUserDeleteRows" Value="False"/>
+                <Setter Property="IsReadOnly" Value="True"/>
+                <Setter Property="AutoGenerateColumns" Value="True"/>
+                <Setter Property="SelectionMode" Value="Extended"/>
+                <Setter Property="SelectionUnit" Value="CellOrRowHeader"/>
+                <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+                <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+                <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+            </Style>
+            <Style TargetType="GroupBox">
+                <Setter Property="Padding" Value="8"/>
+                <Setter Property="Margin" Value="0,5,0,5"/>
+                <Setter Property="BorderBrush" Value="Gray"/>
+                <Setter Property="BorderThickness" Value="1"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <!-- Health Check -->
+            <RowDefinition Height="Auto"/>
+            <!-- Separator -->
+            <RowDefinition Height="*"/>
+            <!-- Main Content Area (TabControl) -->
+            <RowDefinition Height="Auto"/>
+            <!-- Status Bar -->
+        </Grid.RowDefinitions>
+
+        <!-- Mode 1: System & Health -->
+        <StackPanel Grid.Row="0" Orientation="Vertical">
+            <TextBlock Text="System Health" FontSize="16" FontWeight="Bold" Margin="0,0,0,5"/>
+            <Button Content="Check API Health" Command="{Binding CheckHealthCommand}" Width="160" HorizontalAlignment="Left"/>
+            <TextBlock Text="{Binding HealthStatus}" TextWrapping="Wrap" Margin="0,5,0,5" MinHeight="20"/>
+        </StackPanel>
+
+        <Separator Grid.Row="1" Margin="0,5,0,10"/>
+
+        <TabControl Grid.Row="2">
+            <!-- Tab 1: Tables & Views Schema -->
+            <TabItem Header="Schema Explorer">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="250" MaxWidth="400"/>
+                        <!-- Lists -->
+                        <ColumnDefinition Width="5"/>
+                        <!-- Splitter -->
+                        <ColumnDefinition Width="*"/>
+                        <!-- Details -->
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,5,0">
+                        <TextBlock Text="Tables" FontSize="14" FontWeight="SemiBold" Margin="0,5,0,2"/>
+                        <Button Content="Load Tables" Command="{Binding LoadTablesCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,5"/>
+                        <ListView ItemsSource="{Binding Tables}" MaxHeight="200"
+                                  SelectedItem="{Binding SelectedTableNameForSchema, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Table Name" DisplayMemberBinding="{Binding}" Width="Auto"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <TextBlock Text="Views" FontSize="14" FontWeight="SemiBold" Margin="0,10,0,2"/>
+                        <Button Content="Load Views" Command="{Binding LoadViewsCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,5"/>
+                        <ListView ItemsSource="{Binding Views}" MaxHeight="200"
+                                  SelectedItem="{Binding SelectedTableNameForSchema, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="View Name" DisplayMemberBinding="{Binding}" Width="Auto"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </StackPanel>
+
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="LightGray"/>
+
+                    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" Margin="5,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Schema Details" FontSize="16" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Selected Item:" Margin="0,0,5,0"/>
+                                <TextBox Grid.Column="1" Text="{Binding SelectedTableNameForSchema, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="2" Content="Load Schema" Command="{Binding LoadTableSchemaCommand}" Margin="5,0,0,0"/>
+                            </Grid>
+
+                            <Border BorderBrush="DarkGray" BorderThickness="1" Padding="10" Margin="0,0,0,10"
+                                    Visibility="{Binding SelectedTableSchema, Converter={StaticResource NullToVisibilityConverter}, FallbackValue=Collapsed}">
+                                <StackPanel DataContext="{Binding SelectedTableSchema}">
+                                    <TextBlock FontWeight="SemiBold" FontSize="14">
+                                        <Run Text="DB Name: "/>
+                                        <Run Text="{Binding DbTableName}"/>
+                                        <Run Text=" (Schema: "/>
+                                        <Run Text="{Binding DbSchema}"/>
+                                        <Run Text=", Type: "/>
+                                        <Run Text="{Binding IsView, Converter={StaticResource BoolToViewTableConverter}}"/>
+                                        <Run Text=")"/>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Name, StringFormat='ORM/Pydantic Name: {0}'}" Margin="0,0,0,8" FontStyle="Italic"/>
+
+                                    <TextBlock Text="Columns:" FontWeight="SemiBold" Margin="0,5,0,2"/>
+                                    <DataGrid ItemsSource="{Binding Columns}" MaxHeight="250">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="Auto" MinWidth="100"/>
+                                            <DataGridTextColumn Header="DB Type" Binding="{Binding Type}" Width="Auto" MinWidth="100"/>
+                                            <DataGridTextColumn Header="Python Type" Binding="{Binding PythonType}" Width="Auto" MinWidth="100"/>
+                                            <DataGridCheckBoxColumn Header="Nullable" Binding="{Binding Nullable}" Width="Auto"/>
+                                            <DataGridCheckBoxColumn Header="PK" Binding="{Binding PrimaryKey}" Width="Auto"/>
+                                            <DataGridTextColumn Header="Default" Binding="{Binding Default}" Width="*"/>
+                                            <DataGridTextColumn Header="Server Default" Binding="{Binding ServerDefault}" Width="*"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+
+                                    <TextBlock Text="Primary Keys:" FontWeight="SemiBold" Margin="0,8,0,2"
+                                               Visibility="{Binding PrimaryKeys.Count, Converter={StaticResource CountToVisibilityConverter}}"/>
+                                    <ItemsControl ItemsSource="{Binding PrimaryKeys}"
+                                                  Visibility="{Binding PrimaryKeys.Count, Converter={StaticResource CountToVisibilityConverter}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" Margin="15,0,0,0"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="Pydantic Models:" FontWeight="SemiBold" Margin="0,8,0,2"/>
+                                    <StackPanel Margin="15,0,0,0" DataContext="{Binding PydanticModels}">
+                                        <TextBlock Text="{Binding Read, StringFormat='Read: {0}'}"/>
+                                        <TextBlock Text="{Binding Create, StringFormat='Create: {0}'}"/>
+                                        <TextBlock Text="{Binding Update, StringFormat='Update: {0}'}"/>
+                                    </StackPanel>
+
+                                    <TextBlock Text="Foreign Keys:" FontWeight="SemiBold" Margin="0,8,0,2" 
+                                               Visibility="{Binding ForeignKeys.Count, Converter={StaticResource CountToVisibilityConverter}}"/>
+                                    <ItemsControl ItemsSource="{Binding ForeignKeys}"
+                                                  Visibility="{Binding ForeignKeys.Count, Converter={StaticResource CountToVisibilityConverter}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type services:ForeignKeyInfo}">
+                                                <Border BorderBrush="LightGray" BorderThickness="1" Margin="0,2,0,2" Padding="5">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name, StringFormat='FK Name: {0}'}" FontWeight="Normal"/>
+                                                        <TextBlock Text="{Binding ConstrainedColumns, Converter={StaticResource ListToStringConverter}, StringFormat='Local Columns: {0}'}" Margin="10,0,0,0"/>
+                                                        <TextBlock Margin="10,0,0,0"> <!-- ИСПРАВЛЕНИЕ ОШИБКИ 197: Убрана лишняя '}' -->
+                                                            <Run Text="References: "/>
+                                                            <Run Text="{Binding ReferredSchema}"/>.<Run Text="{Binding ReferredTable}"/>
+                                                            (<Run Text="{Binding ReferredColumns, Converter={StaticResource ListToStringConverter}}"/>)
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Routines">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="350" MaxWidth="500"/>
+                        <!-- Lists -->
+                        <ColumnDefinition Width="5"/>
+                        <!-- Splitter -->
+                        <ColumnDefinition Width="*"/>
+                        <!-- Execution -->
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,5,0">
+                        <!-- Procedures Section -->
+                        <TextBlock Text="Procedures" FontSize="14" FontWeight="SemiBold" Margin="0,5,0,2"/>
+                        <Button Content="Load Procedures" Command="{Binding LoadProceduresCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,5"/>
+                        <ListView ItemsSource="{Binding Procedures}" MaxHeight="220" Margin="0,0,0,10">
+                            <!-- Убираем SelectedItem привязку отсюда, если хотим только по двойному клику -->
+                            <!-- SelectedItem="{Binding DataContext.SelectedRoutineName, RelativeSource={RelativeSource AncestorType={x:Type Window}}, ConverterParameter=Procedure, Converter={StaticResource ObjectPropertyConverter}, Mode=TwoWay}" -->
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="MouseDoubleClick">
+                                    <i:InvokeCommandAction Command="{Binding DataContext.SelectRoutineCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                       CommandParameter="{Binding RelativeSource={RelativeSource AncestorType={x:Type ListViewItem}}, Path=DataContext}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Name" DisplayMemberBinding="{Binding Name}" Width="150"/>
+                                    <GridViewColumn Header="Signature" DisplayMemberBinding="{Binding ArgumentsSignature}" Width="180"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <!-- Functions Section -->
+                        <TextBlock Text="Functions" FontSize="14" FontWeight="SemiBold" Margin="0,5,0,2"/>
+                        <Button Content="Load Functions" Command="{Binding LoadFunctionsCommand}" HorizontalAlignment="Stretch" Margin="0,0,0,5"/>
+                        <ListView ItemsSource="{Binding Functions}" MaxHeight="220">
+                            <!-- Убираем SelectedItem привязку отсюда -->
+                            <i:Interaction.Triggers>
+                                <i:EventTrigger EventName="MouseDoubleClick">
+                                    <i:InvokeCommandAction Command="{Binding DataContext.SelectRoutineCommand, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                       CommandParameter="{Binding RelativeSource={RelativeSource AncestorType={x:Type ListViewItem}}, Path=DataContext}"/>
+                                </i:EventTrigger>
+                            </i:Interaction.Triggers>
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Name" DisplayMemberBinding="{Binding Name}" Width="120"/>
+                                    <GridViewColumn Header="Returns" DisplayMemberBinding="{Binding PreciseReturnType}" Width="120"/>
+                                    <GridViewColumn Header="Signature" DisplayMemberBinding="{Binding ArgumentsSignature}" Width="Auto"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </StackPanel>
+
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="LightGray"/>
+
+                    <ScrollViewer Grid.Column="2" Margin="5,0,0,0" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="Routine Execution" FontSize="16" FontWeight="Bold" Margin="0,5,0,5"/>
+                            <TextBlock Text="Selected Routine:" Margin="0,0,0,2"/>
+                            <TextBox Text="{Binding SelectedRoutineName, Mode=OneWay}" IsReadOnly="True" Margin="0,0,0,8" Background="LightGray"/>
+
+                            <TextBlock Text="Arguments (JSON array for 'args', e.g., [1, &quot;test&quot;] or [] for no args):" Margin="0,0,0,2"/>
+                            <!-- ИСПРАВЛЕНИЕ ОШИБКИ 260: Экранирование кавычек -->
+                            <TextBox Text="{Binding RoutineArgumentsInput, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" Height="80" VerticalScrollBarVisibility="Auto" Margin="0,0,0,10"
+                                     FontFamily="Consolas"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="Call Procedure" Command="{Binding CallProcedureCommand}" Width="120" Margin="0,0,10,0"/>
+                                <Button Content="Call Function" Command="{Binding CallFunctionCommand}" Width="120"/>
+                            </StackPanel>
+
+                            <TextBlock Text="Result:" Margin="0,0,0,2"/>
+                            <TextBox Text="{Binding RoutineCallResult, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" MinHeight="150" MaxHeight="400" VerticalScrollBarVisibility="Auto"
+                                     FontFamily="Consolas" TextWrapping="Wrap" Background="#FFF0F0F0"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Data Access">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <!-- Общий запрос -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- Запрос по колонке -->
+                        <RowDefinition Height="*"/>
+                        <!-- Отображение данных -->
+                    </Grid.RowDefinitions>
+
+                    <GroupBox Header="Query Data (Generic)" Grid.Row="0">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Table/View:" Margin="0,0,5,0"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DataQueryTableName, UpdateSourceTrigger=PropertyChanged}" MinWidth="180"/>
+
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="Limit:" Margin="10,0,5,0"/>
+                                <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding DataQueryLimit, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+
+                                <TextBlock Grid.Row="0" Grid.Column="4" Text="Offset:" Margin="10,0,5,0"/>
+                                <TextBox Grid.Row="0" Grid.Column="5" Text="{Binding DataQueryOffset, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Sort By:" Margin="0,5,5,0"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DataQuerySortBy, UpdateSourceTrigger=PropertyChanged}" MinWidth="180" Margin="0,5,0,0"
+                                         ToolTipService.ToolTip="e.g., column_name or -column_name for descending"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="Fields:" Margin="10,5,5,0"/>
+                                <TextBox Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="3" Text="{Binding DataQueryFields, UpdateSourceTrigger=PropertyChanged}" MinWidth="180" Margin="0,5,0,0"
+                                         ToolTipService.ToolTip="Comma-separated, e.g., id,name,email"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding DataQueryFilters}" MaxHeight="120" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type viewModels:FilterEntry}">
+                                        <Grid Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*" MinWidth="100"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto" MinWidth="80"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*" MinWidth="100"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Col:" Margin="0,0,2,0"/>
+                                            <TextBox Grid.Column="1" Text="{Binding Column, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Grid.Column="2" Text="Op:" Margin="5,0,2,0"/>
+                                            <ComboBox Grid.Column="3" ItemsSource="{Binding AvailableOperators}" SelectedItem="{Binding Operator}"/>
+                                            <TextBlock Grid.Column="4" Text="Val:" Margin="5,0,2,0"/>
+                                            <TextBox Grid.Column="5" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <Button Grid.Column="6" Content="X" Foreground="Red" FontWeight="Bold" FontSize="10" MinWidth="20" Padding="4,1"
+                                                    Command="{Binding DataContext.RemoveFilterCommand, RelativeSource={RelativeSource AncestorType={x:Type TabItem}}}"
+                                                    CommandParameter="{Binding}" Margin="5,0,0,0"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Button Content="Read Data" Command="{Binding ReadDataCommand}" HorizontalAlignment="Left" FontWeight="Bold" Padding="10,5" Margin="0,10,0,0" MinWidth="120"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="Query Data by Column Value" Grid.Row="1">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Table/View:" Margin="0,0,5,0"/>
+                                <TextBox Grid.Column="1" Text="{Binding DataByColumnTableName, UpdateSourceTrigger=PropertyChanged}" MinWidth="120"/>
+                                <TextBlock Grid.Column="2" Text="Column Name:" Margin="10,0,5,0"/>
+                                <TextBox Grid.Column="3" Text="{Binding DataByColumnName, UpdateSourceTrigger=PropertyChanged}" MinWidth="120"/>
+                                <TextBlock Grid.Column="4" Text="Column Value:" Margin="10,0,5,0"/>
+                                <TextBox Grid.Column="5" Text="{Binding DataByColumnValue, UpdateSourceTrigger=PropertyChanged}" MinWidth="120"/>
+                            </Grid>
+                            <Button Content="Read Data by Column" Command="{Binding ReadDataByColumnCommand}" HorizontalAlignment="Left" FontWeight="Bold" Padding="10,5" Margin="0,10,0,0" MinWidth="150"/>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <Grid Grid.Row="2" Margin="0,5,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,5"
+                                    Visibility="{Binding QueriedDataTable, Converter={StaticResource NullToVisibilityConverter}}">
+                            <Button Content="&lt; Previous" Command="{Binding PreviousPageCommand}" Margin="0,0,5,0" MinWidth="90"/>
+                            <!-- ИСПРАВЛЕНИЕ ОШИБКИ 385: Экранирование '<' -->
+                            <TextBlock Margin="5,0" VerticalAlignment="Center">
+                                <Run Text="Offset:"/> <Run Text="{Binding DataQueryOffset, Mode=OneWay}"/>
+                                <Run Text="/ Limit:"/> <Run Text="{Binding DataQueryLimit, Mode=OneWay}"/>
+                                <Run Text="/ Total:"/> <Run Text="{Binding DataQueryTotalCount, Mode=OneWay}"/>
+                            </TextBlock>
+                            <Button Content="Next >" Command="{Binding NextPageCommand}" Margin="5,0,0,0" MinWidth="90"/>
+                            <!-- ИСПРАВЛЕНИЕ ОШИБКИ 385: Экранирование '>' -->
+                        </StackPanel>
+
+                        <TabControl Grid.Row="1">
+                            <TabItem Header="Generic Query Results">
+                                <DataGrid ItemsSource="{Binding QueriedDataTable}"/>
+                            </TabItem>
+                            <TabItem Header="By Column Value Results">
+                                <DataGrid ItemsSource="{Binding QueriedByColumnDataTable}"/>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <StatusBar Grid.Row="3" VerticalAlignment="Bottom">
+            <StatusBarItem>
+                <TextBlock Text="{Binding ApiStatusMessage}" TextTrimming="CharacterEllipsis"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

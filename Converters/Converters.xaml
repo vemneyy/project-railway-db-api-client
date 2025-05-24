@@ -1,0 +1,10 @@
+<!-- Converters/Converters.xaml -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:ApiManagerApp.Converters">
+    <local:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+    <local:BoolToViewTableConverter x:Key="BoolToViewTableConverter"/>
+    <local:ListToStringConverter x:Key="ListToStringConverter"/>
+    <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+    <local:ObjectPropertyConverter x:Key="ObjectPropertyConverter"/>
+</ResourceDictionary>
