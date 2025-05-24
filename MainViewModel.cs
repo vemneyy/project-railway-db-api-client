@@ -1,57 +1,19 @@
 // ViewModels/MainViewModel.cs
-using System;
+using ApiManagerApp.Services;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
+using System.Data;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions; // Для парсинга сигнатуры
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using ApiManagerApp.Services;
-using System.Collections.Generic;
-using System.Data;
-using System.Globalization;
-using System.Diagnostics;
-using System.Text.Json.Nodes;
-using System.Text.Encodings.Web;
 
 namespace ApiManagerApp.ViewModels
 {
-    public class FilterEntry : INotifyPropertyChanged
-    {
-        private string? _column;
-        public string? Column
-        {
-            get => _column;
-            set { _column = value; OnPropertyChanged(); }
-        }
-
-        private string _operator = "eq"; // Значение по умолчанию
-        public string Operator
-        {
-            get => _operator;
-            set { _operator = value; OnPropertyChanged(); }
-        }
-        public List<string> AvailableOperators { get; } = new List<string>
-            { "eq", "ne", "gt", "gte", "lt", "lte", "like", "ilike", "startswith", "endswith", "in", "isnull" };
-
-
-        private string? _value;
-        public string? Value
-        {
-            get => _value;
-            set { _value = value; OnPropertyChanged(); }
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-    }
-
 
     public class MainViewModel : INotifyPropertyChanged
     {
@@ -92,7 +54,7 @@ namespace ApiManagerApp.ViewModels
                 }
             }
         }
-        
+
 
         private string? _selectedRoutineName;
         public string? SelectedRoutineName
@@ -163,8 +125,6 @@ namespace ApiManagerApp.ViewModels
             get => _dataQueryFields;
             set { _dataQueryFields = value; OnPropertyChanged(); }
         }
-
-        public ObservableCollection<FilterEntry> DataQueryFilters { get; } = new ObservableCollection<FilterEntry>();
 
         private DataTable? _queriedDataTable;
         public DataTable? QueriedDataTable
@@ -245,8 +205,6 @@ namespace ApiManagerApp.ViewModels
         public ICommand LoadFunctionsCommand { get; }
         public ICommand CallProcedureCommand { get; }
         public ICommand CallFunctionCommand { get; }
-        public ICommand AddFilterCommand { get; }
-        public ICommand RemoveFilterCommand { get; }
         public ICommand ReadDataCommand { get; }
         public ICommand ReadDataByColumnCommand { get; }
         public ICommand NextPageCommand { get; }
@@ -266,7 +224,7 @@ namespace ApiManagerApp.ViewModels
             _dataByColumnTableName = string.Empty;
             _dataByColumnName = string.Empty;
             _dataByColumnValue = string.Empty;
-            _selectedRoutineItem = new object(); 
+            _selectedRoutineItem = new object();
             SelectRoutineCommand = new RelayCommand(param => { /* Command logic */ }, param => true);
 
             ApiStatusMessage = "Готово";
@@ -285,9 +243,6 @@ namespace ApiManagerApp.ViewModels
                                                     param => !string.IsNullOrWhiteSpace(SelectedRoutineName));
             CallFunctionCommand = new RelayCommand(async param => await ExecuteCallRoutineAsync("function"),
                                                    param => !string.IsNullOrWhiteSpace(SelectedRoutineName));
-            AddFilterCommand = new RelayCommand(param => DataQueryFilters.Add(new FilterEntry()), param => true);
-            RemoveFilterCommand = new RelayCommand(param => { if (param is FilterEntry filter) DataQueryFilters.Remove(filter); },
-                                                   param => param is FilterEntry);
             ReadDataCommand = new RelayCommand(async param => await ExecuteReadDataAsync(),
                                                param => !string.IsNullOrWhiteSpace(DataQueryTableName));
             ReadDataByColumnCommand = new RelayCommand(async param => await ExecuteReadDataByColumnAsync(),
@@ -577,11 +532,11 @@ namespace ApiManagerApp.ViewModels
             else
             {
                 // Если ошибка, но задержка была измерена (например, сервер ответил ошибкой)
-                if (latency > TimeSpan.Zero || (errorMessage?.Contains("timed out") ?? false)) 
+                if (latency > TimeSpan.Zero || (errorMessage?.Contains("timed out") ?? false))
                 {
                     HealthStatus = $"Проверка соединения завершилась ошибкой: {errorMessage}{latencyString}";
                 }
-                else 
+                else
                 {
                     HealthStatus = $"Проверка соединения завершилась ошибкой: {errorMessage}";
                 }
@@ -776,14 +731,6 @@ namespace ApiManagerApp.ViewModels
             QueriedDataTable = null;
 
             var filtersDict = new Dictionary<string, string>();
-            foreach (var filter in DataQueryFilters)
-            {
-                if (!string.IsNullOrWhiteSpace(filter.Column) && filter.Value != null) // Разрешаем пустую строку для Value
-                {
-                    string filterKey = filter.Operator.ToLower() == "eq" ? filter.Column : $"{filter.Column}__{filter.Operator}";
-                    filtersDict[filterKey] = filter.Value;
-                }
-            }
 
             var (response, errorMessage) = await _apiService.ReadItemsAsync(
                 DataQueryTableName,

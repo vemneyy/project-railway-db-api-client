@@ -166,6 +166,22 @@ namespace ApiManagerApp.Services
         public List<T>? Data { get; set; }
     }
 
+    public class FastApiValidationError
+    {
+        [JsonPropertyName("loc")]
+        public List<object>? Loc { get; set; }
+        [JsonPropertyName("msg")]
+        public string? Msg { get; set; }
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+    }
+
+    public class FastApiValidationErrorWrapper
+    {
+        [JsonPropertyName("detail")]
+        public List<FastApiValidationError>? Detail { get; set; }
+    }
+
     public class ApiService
     {
         private readonly HttpClient _httpClient;
@@ -191,6 +207,93 @@ namespace ApiManagerApp.Services
             {
                 PropertyNameCaseInsensitive = true
             };
+        }
+
+        private string FormatError(HttpResponseMessage response, string responseString)
+        {
+            string baseError = $"Ошибка: {response.StatusCode} - {response.ReasonPhrase}.";
+            if (string.IsNullOrWhiteSpace(responseString))
+            {
+                return $"{baseError} (Пустое тело ответа)";
+            }
+
+            try
+            {
+                // Попытка разобрать как ошибку валидации FastAPI
+                var validationErrorWrapper = JsonSerializer.Deserialize<FastApiValidationErrorWrapper>(responseString, _jsonSerializerOptions);
+                if (validationErrorWrapper?.Detail != null && validationErrorWrapper.Detail.Any())
+                {
+                    var errorMessages = validationErrorWrapper.Detail.Select(d =>
+                    {
+                        string loc = d.Loc != null && d.Loc.Any() ? string.Join(" -> ", d.Loc.Select(o => o.ToString())) : "Н/Д";
+                        return $"Поле: {loc}, Сообщение: {d.Msg} (Тип: {d.Type})";
+                    });
+                    return $"{baseError}\nДетали валидации:\n{string.Join("\n", errorMessages)}";
+                }
+
+                // Попытка разобрать как стандартную ошибку FastAPI с "detail"
+                var errorDetailDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(responseString, _jsonSerializerOptions);
+                if (errorDetailDict != null && errorDetailDict.TryGetValue("detail", out var detailElement))
+                {
+                    if (detailElement.ValueKind == JsonValueKind.String)
+                    {
+                        return $"{baseError}\nДетали: {detailElement.GetString()}";
+                    }
+                    // Если detail - это объект или массив, выведем его как JSON
+                    return $"{baseError}\nДетали (JSON):\n{JsonSerializer.Serialize(detailElement, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
+                }
+
+                // Если не удалось разобрать как известный формат ошибки, но это валидный JSON
+                using (JsonDocument.Parse(responseString)) // Проверка на валидность JSON
+                {
+                    return $"{baseError}\nОтвет сервера (JSON):\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(responseString), new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
+                }
+            }
+            catch (JsonException)
+            {
+                // Если это не JSON, выводим как есть (обрезанный)
+                const int maxRawTextLength = 500;
+                string rawText = responseString.Length > maxRawTextLength
+                    ? $"{responseString.Substring(0, maxRawTextLength)}..."
+                    : responseString;
+                return $"{baseError}\nОтвет сервера (текст):\n{rawText}";
+            }
+        }
+
+        private async Task<string> FormatErrorAsync(HttpResponseMessage response, string responseString)
+        {
+            // Логика идентична синхронной версии, просто обернута в Task.FromResult
+            // для совместимости, если бы были асинхронные операции внутри.
+            return await Task.FromResult(FormatError(response, responseString));
+        }
+
+        public async Task<(List<string>? Tables, string? ErrorMessage)> GetTablesAsync()
+        {
+            return await GetAsync<List<string>>("/schema/tables");
+        }
+
+        public async Task<(List<string>? Views, string? ErrorMessage)> GetViewsAsync()
+        {
+            return await GetAsync<List<string>>("/schema/views");
+        }
+
+        public async Task<(TableSchemaDetail? Schema, string ErrorMessage)> GetTableOrViewSchemaAsync(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return (null, "Имя таблицы/представления не может быть пустым.");
+
+            var (responseBody, errorMessage) = await GetAsync<TableSchemaDetail>($"/schema/table/{Uri.EscapeDataString(name)}");
+            return (responseBody, errorMessage ?? string.Empty);
+        }
+
+        public async Task<(List<ProcedureInfo>? Procedures, string? ErrorMessage)> GetProceduresAsync()
+        {
+            return await GetAsync<List<ProcedureInfo>>("/schema/procedures");
+        }
+
+        public async Task<(List<FunctionInfo>? Functions, string? ErrorMessage)> GetFunctionsAsync()
+        {
+            return await GetAsync<List<FunctionInfo>>("/schema/functions");
         }
 
         private async Task<(T? ResponseBody, string? ErrorMessage)> GetAsync<T>(string requestUri)
@@ -272,73 +375,6 @@ namespace ApiManagerApp.Services
             }
         }
 
-        private string FormatError(HttpResponseMessage response, string responseString)
-        {
-            string baseError = $"Ошибка: {response.StatusCode} - {response.ReasonPhrase}.";
-            if (string.IsNullOrWhiteSpace(responseString))
-            {
-                return $"{baseError} (Пустое тело ответа)";
-            }
-
-            try
-            {
-                // Попытка разобрать как ошибку валидации FastAPI
-                var validationErrorWrapper = JsonSerializer.Deserialize<FastApiValidationErrorWrapper>(responseString, _jsonSerializerOptions);
-                if (validationErrorWrapper?.Detail != null && validationErrorWrapper.Detail.Any())
-                {
-                    var errorMessages = validationErrorWrapper.Detail.Select(d =>
-                    {
-                        string loc = d.Loc != null && d.Loc.Any() ? string.Join(" -> ", d.Loc.Select(o => o.ToString())) : "Н/Д";
-                        return $"Поле: {loc}, Сообщение: {d.Msg} (Тип: {d.Type})";
-                    });
-                    return $"{baseError}\nДетали валидации:\n{string.Join("\n", errorMessages)}";
-                }
-
-                // Попытка разобрать как стандартную ошибку FastAPI с "detail"
-                var errorDetailDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(responseString, _jsonSerializerOptions);
-                if (errorDetailDict != null && errorDetailDict.TryGetValue("detail", out var detailElement))
-                {
-                    if (detailElement.ValueKind == JsonValueKind.String)
-                    {
-                        return $"{baseError}\nДетали: {detailElement.GetString()}";
-                    }
-                    // Если detail - это объект или массив, выведем его как JSON
-                    return $"{baseError}\nДетали (JSON):\n{JsonSerializer.Serialize(detailElement, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
-                }
-
-                // Если не удалось разобрать как известный формат ошибки, но это валидный JSON
-                using (JsonDocument.Parse(responseString)) // Проверка на валидность JSON
-                {
-                    return $"{baseError}\nОтвет сервера (JSON):\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(responseString), new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
-                }
-            }
-            catch (JsonException)
-            {
-                // Если это не JSON, выводим как есть (обрезанный)
-                const int maxRawTextLength = 500;
-                string rawText = responseString.Length > maxRawTextLength
-                    ? $"{responseString.Substring(0, maxRawTextLength)}..."
-                    : responseString;
-                return $"{baseError}\nОтвет сервера (текст):\n{rawText}";
-            }
-        }
-
-        public class FastApiValidationError
-        {
-            [JsonPropertyName("loc")]
-            public List<object>? Loc { get; set; }
-            [JsonPropertyName("msg")]
-            public string? Msg { get; set; }
-            [JsonPropertyName("type")]
-            public string? Type { get; set; }
-        }
-        public class FastApiValidationErrorWrapper
-        {
-            [JsonPropertyName("detail")]
-            public List<FastApiValidationError>? Detail { get; set; }
-        }
-
-
         public async Task<(HealthCheckResponse? HealthInfo, TimeSpan Latency, string? ErrorMessage)> CheckHealthAsyncWithLatency()
         {
             var stopwatch = new Stopwatch();
@@ -382,42 +418,6 @@ namespace ApiManagerApp.Services
                 Debug.WriteLine($"Health Check общее исключение: {ex.Message}");
                 return (null, stopwatch.Elapsed, $"Произошла непредвиденная ошибка: {ex.Message}");
             }
-        }
-
-        private async Task<string> FormatErrorAsync(HttpResponseMessage response, string responseString)
-        {
-            // Логика идентична синхронной версии, просто обернута в Task.FromResult
-            // для совместимости, если бы были асинхронные операции внутри.
-            return await Task.FromResult(FormatError(response, responseString));
-        }
-
-        public async Task<(List<string>? Tables, string? ErrorMessage)> GetTablesAsync()
-        {
-            return await GetAsync<List<string>>("/schema/tables");
-        }
-
-        public async Task<(List<string>? Views, string? ErrorMessage)> GetViewsAsync()
-        {
-            return await GetAsync<List<string>>("/schema/views");
-        }
-
-        public async Task<(TableSchemaDetail? Schema, string ErrorMessage)> GetTableOrViewSchemaAsync(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-                return (null, "Имя таблицы/представления не может быть пустым.");
-
-            var (responseBody, errorMessage) = await GetAsync<TableSchemaDetail>($"/schema/table/{Uri.EscapeDataString(name)}");
-            return (responseBody, errorMessage ?? string.Empty);
-        }
-
-        public async Task<(List<ProcedureInfo>? Procedures, string? ErrorMessage)> GetProceduresAsync()
-        {
-            return await GetAsync<List<ProcedureInfo>>("/schema/procedures");
-        }
-
-        public async Task<(List<FunctionInfo>? Functions, string? ErrorMessage)> GetFunctionsAsync()
-        {
-            return await GetAsync<List<FunctionInfo>>("/schema/functions");
         }
 
         public async Task<(RoutineCallResponse Response, string ErrorMessage)> CallRoutineAsync(string routineType, string routineName, RoutineCallArgs payload)
