@@ -1,187 +1,14 @@
 // ApiService.cs
+using ApiManagerApp.Classes;
 using Microsoft.AspNetCore.WebUtilities;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-
 
 namespace ApiManagerApp.Services
 {
-    public class HealthCheckResponse
-    {
-        [JsonPropertyName("status")]
-        public string? Status { get; set; }
-
-        [JsonPropertyName("database_connection")]
-        public string? DatabaseConnection { get; set; }
-    }
-
-    public class ColumnInfo
-    {
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
-
-        [JsonPropertyName("type")]
-        public string? Type { get; set; }
-
-        [JsonPropertyName("python_type")]
-        public string? PythonType { get; set; }
-
-        [JsonPropertyName("nullable")]
-        public bool Nullable { get; set; }
-
-        [JsonPropertyName("primary_key")]
-        public bool PrimaryKey { get; set; }
-
-        [JsonPropertyName("default")]
-        public string? Default { get; set; }
-
-        [JsonPropertyName("server_default")]
-        public string? ServerDefault { get; set; }
-    }
-
-    public class ForeignKeyInfo
-    {
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
-
-        [JsonPropertyName("constrained_columns")]
-        public List<string>? ConstrainedColumns { get; set; }
-
-        [JsonPropertyName("referred_schema")]
-        public string? ReferredSchema { get; set; }
-
-        [JsonPropertyName("referred_table")]
-        public string? ReferredTable { get; set; }
-
-        [JsonPropertyName("referred_columns")]
-        public List<string>? ReferredColumns { get; set; }
-    }
-
-    public class PydanticModelsInfo
-    {
-        [JsonPropertyName("read")]
-        public string? Read { get; set; }
-
-        [JsonPropertyName("create")]
-        public string? Create { get; set; }
-
-        [JsonPropertyName("update")]
-        public string? Update { get; set; }
-    }
-
-    public class TableSchemaDetail
-    {
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
-
-        [JsonPropertyName("db_table_name")]
-        public string? DbTableName { get; set; }
-
-        [JsonPropertyName("db_schema")]
-        public string? DbSchema { get; set; }
-
-        [JsonPropertyName("is_view")]
-        public bool IsView { get; set; }
-
-        [JsonPropertyName("columns")]
-        public List<ColumnInfo>? Columns { get; set; }
-
-        [JsonPropertyName("primary_keys")]
-        public List<string>? PrimaryKeys { get; set; }
-
-        [JsonPropertyName("foreign_keys")]
-        public List<ForeignKeyInfo>? ForeignKeys { get; set; }
-
-        [JsonPropertyName("pydantic_models")]
-        public PydanticModelsInfo? PydanticModels { get; set; }
-    }
-
-    public class ProcedureInfo
-    {
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
-
-        [JsonPropertyName("arguments_signature")]
-        public string? ArgumentsSignature { get; set; }
-    }
-
-    public class FunctionInfo
-    {
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
-
-        [JsonPropertyName("return_type")]
-        public string? ReturnType { get; set; }
-
-        [JsonPropertyName("arguments_signature")]
-        public string? ArgumentsSignature { get; set; }
-
-        [JsonPropertyName("precise_return_type")]
-        public string? PreciseReturnType { get; set; }
-    }
-
-    public class RoutineCallArgs
-    {
-        [JsonPropertyName("args")]
-        public List<object> Args { get; set; } = new List<object>();
-
-        [JsonPropertyName("kwargs")]
-        public Dictionary<string, object> Kwargs { get; set; } = new Dictionary<string, object>();
-    }
-
-    public class RoutineCallResponse
-    {
-        [JsonPropertyName("status")]
-        public string? Status { get; set; }
-
-        [JsonPropertyName("procedure")]
-        public string? Procedure { get; set; }
-
-        [JsonPropertyName("function")]
-        public string? Function { get; set; }
-
-        [JsonPropertyName("args_used")]
-        public List<object>? ArgsUsed { get; set; }
-
-        [JsonPropertyName("result")]
-        public JsonElement Result { get; set; }
-    }
-
-    public class PaginatedDataResponse<T>
-    {
-        [JsonPropertyName("total_count")]
-        public int TotalCount { get; set; }
-
-        [JsonPropertyName("limit")]
-        public int Limit { get; set; }
-
-        [JsonPropertyName("offset")]
-        public int Offset { get; set; }
-
-        [JsonPropertyName("data")]
-        public List<T>? Data { get; set; }
-    }
-
-    public class FastApiValidationError
-    {
-        [JsonPropertyName("loc")]
-        public List<object>? Loc { get; set; }
-        [JsonPropertyName("msg")]
-        public string? Msg { get; set; }
-        [JsonPropertyName("type")]
-        public string? Type { get; set; }
-    }
-
-    public class FastApiValidationErrorWrapper
-    {
-        [JsonPropertyName("detail")]
-        public List<FastApiValidationError>? Detail { get; set; }
-    }
-
     public class ApiService
     {
         private readonly HttpClient _httpClient;
@@ -219,7 +46,6 @@ namespace ApiManagerApp.Services
 
             try
             {
-                // Попытка разобрать как ошибку валидации FastAPI
                 var validationErrorWrapper = JsonSerializer.Deserialize<FastApiValidationErrorWrapper>(responseString, _jsonSerializerOptions);
                 if (validationErrorWrapper?.Detail != null && validationErrorWrapper.Detail.Any())
                 {
@@ -231,7 +57,6 @@ namespace ApiManagerApp.Services
                     return $"{baseError}\nДетали валидации:\n{string.Join("\n", errorMessages)}";
                 }
 
-                // Попытка разобрать как стандартную ошибку FastAPI с "detail"
                 var errorDetailDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(responseString, _jsonSerializerOptions);
                 if (errorDetailDict != null && errorDetailDict.TryGetValue("detail", out var detailElement))
                 {
@@ -239,19 +64,16 @@ namespace ApiManagerApp.Services
                     {
                         return $"{baseError}\nДетали: {detailElement.GetString()}";
                     }
-                    // Если detail - это объект или массив, выведем его как JSON
                     return $"{baseError}\nДетали (JSON):\n{JsonSerializer.Serialize(detailElement, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
                 }
 
-                // Если не удалось разобрать как известный формат ошибки, но это валидный JSON
-                using (JsonDocument.Parse(responseString)) // Проверка на валидность JSON
+                using (JsonDocument.Parse(responseString))
                 {
                     return $"{baseError}\nОтвет сервера (JSON):\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(responseString), new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
                 }
             }
             catch (JsonException)
             {
-                // Если это не JSON, выводим как есть (обрезанный)
                 const int maxRawTextLength = 500;
                 string rawText = responseString.Length > maxRawTextLength
                     ? $"{responseString.Substring(0, maxRawTextLength)}..."
@@ -262,8 +84,6 @@ namespace ApiManagerApp.Services
 
         private async Task<string> FormatErrorAsync(HttpResponseMessage response, string responseString)
         {
-            // Логика идентична синхронной версии, просто обернута в Task.FromResult
-            // для совместимости, если бы были асинхронные операции внутри.
             return await Task.FromResult(FormatError(response, responseString));
         }
 
