@@ -11,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        configuration: [Debug, Release]
+        configuration: [Release]
 
     runs-on: windows-latest
 
@@ -27,7 +27,7 @@ jobs:
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 8.0.x
+        dotnet-version: 9.0.x
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -37,10 +37,6 @@ jobs:
 
     - name: Build solution
       run: msbuild $env:Solution_Name /p:Configuration=${{ matrix.configuration }}
-
-    - name: Run unit tests (if any)
-      run: dotnet test
-      continue-on-error: true
 
     - name: Upload build artifacts
       if: matrix.configuration == 'Release'
@@ -54,21 +50,25 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/master'
     runs-on: windows-latest
-
+  
     steps:
     - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
         name: Build Output Release
         path: release-artifacts
-
+  
+    - name: Archive compiled files
+      run: |
+        Compress-Archive -Path release-artifacts\* -DestinationPath release.zip
+  
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ github.run_number }}
         name: Release v${{ github.run_number }}
         body: "Автоматическая сборка для Release-конфигурации"
-        files: release-artifacts/**/*
-
+        files: release.zip
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+
