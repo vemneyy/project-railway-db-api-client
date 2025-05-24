@@ -278,10 +278,16 @@ namespace ApiManagerApp.ViewModels
                                                       param => !string.IsNullOrWhiteSpace(SelectedTableNameForSchema));
             LoadProceduresCommand = new RelayCommand(async param => await ExecuteLoadProceduresAsync(), param => true);
             LoadFunctionsCommand = new RelayCommand(async param => await ExecuteLoadFunctionsAsync(), param => true);
-            CallProcedureCommand = new RelayCommand(async param => await ExecuteCallRoutineAsync("процедура"),
+
+            // Point CallProcedureCommand and CallFunctionCommand to ExecuteCallSelectedRoutineAsync
+            // if SelectedRoutineName is managed by SelectedRoutineItem. Otherwise, ensure ExecuteCallRoutineAsync is updated.
+            // For simplicity, we assume CallSelectedRoutineCommand is the primary path for new calls.
+            // If CallProcedureCommand/CallFunctionCommand are still independently used, ExecuteCallRoutineAsync needs the same fix.
+            CallProcedureCommand = new RelayCommand(async param => await ExecuteCallRoutineAsync("процедура"), //This still calls ExecuteCallRoutineAsync
                                                     param => !string.IsNullOrWhiteSpace(SelectedRoutineName));
-            CallFunctionCommand = new RelayCommand(async param => await ExecuteCallRoutineAsync("функция"),
+            CallFunctionCommand = new RelayCommand(async param => await ExecuteCallRoutineAsync("функция"),    //This still calls ExecuteCallRoutineAsync
                                                    param => !string.IsNullOrWhiteSpace(SelectedRoutineName));
+
             ReadDataCommand = new RelayCommand(async param => await ExecuteReadDataAsync(),
                                                param => !string.IsNullOrWhiteSpace(DataQueryTableName));
             ReadDataByColumnCommand = new RelayCommand(async param => await ExecuteReadDataByColumnAsync(),
@@ -471,8 +477,8 @@ namespace ApiManagerApp.ViewModels
 
             string routineType = SelectedRoutineItem is ProcedureInfo ? "процедура" : "функция";
             ApiStatusMessage = $"Вызов {routineType} {SelectedRoutineName}...";
-            RoutineCallResult = "";
-            RoutineCallDataTableResult = null;
+            RoutineCallResult = ""; // Clear previous result
+            RoutineCallDataTableResult = null; // Clear previous table result
 
             RoutineCallArgs payload = new RoutineCallArgs();
             try
@@ -497,50 +503,53 @@ namespace ApiManagerApp.ViewModels
             {
                 ApiStatusMessage = $"Предупреждение: Не удалось разобрать аргументы как JSON-массив: {jsonEx.Message}. Отправка пустых аргументов.";
                 RoutineCallResult = $"Ошибка разбора аргументов: {jsonEx.Message}";
+                // Do not return here, proceed with empty or default payload if desired, or handle as error
             }
-            catch (Exception ex)
+            catch (Exception ex) // Catch other argument parsing errors
             {
-                ApiStatusMessage = $"Ошибка разбора аргументов: {ex.Message}";
-                RoutineCallResult = $"Ошибка разбора аргументов: {ex.Message}";
-                return;
+                ApiStatusMessage = $"Ошибка подготовки аргументов: {ex.Message}";
+                RoutineCallResult = $"Ошибка подготовки аргументов: {ex.Message}";
+                return; // Return if payload preparation fails critically
             }
 
             var (response, errorMessage) = await _apiService.CallRoutineAsync(routineType, SelectedRoutineName, payload);
 
-            if (response != null)
+            if (!string.IsNullOrEmpty(errorMessage)) // Prioritize error message from ApiService
             {
-                ApiStatusMessage = $"{routineType} '{SelectedRoutineName}' успешно вызвана.";
-                if (response.Result.ValueKind != JsonValueKind.Undefined && response.Result.ValueKind != JsonValueKind.Null)
+                ApiStatusMessage = $"Ошибка вызова {routineType} {SelectedRoutineName}.";
+                RoutineCallResult = errorMessage; // This contains the detailed error from ApiService
+                RoutineCallDataTableResult = null;
+            }
+            else // No direct API call error, process the response content (response object is guaranteed non-null by ApiService)
+            {
+                ApiStatusMessage = $"{routineType} '{SelectedRoutineName}' вызвана, ответ от API получен.";
+
+                bool isFunctionReturningTable = SelectedRoutineItem is FunctionInfo funcInfo &&
+                                                (funcInfo.PreciseReturnType?.ToUpperInvariant().StartsWith("TABLE") == true ||
+                                                 funcInfo.PreciseReturnType?.ToUpperInvariant().Contains("SETOF RECORD") == true ||
+                                                 funcInfo.PreciseReturnType?.ToUpperInvariant().Contains("RECORD[]") == true);
+
+                if (isFunctionReturningTable && response.Result.ValueKind == JsonValueKind.Array)
                 {
-                    if (SelectedRoutineItem is FunctionInfo funcInfo &&
-                        (funcInfo.PreciseReturnType?.ToUpperInvariant().StartsWith("TABLE") == true ||
-                         funcInfo.PreciseReturnType?.ToUpperInvariant().Contains("SETOF RECORD") == true ||
-                         funcInfo.PreciseReturnType?.ToUpperInvariant().Contains("RECORD[]") == true))
+                    try
                     {
-                        if (response.Result.ValueKind == JsonValueKind.Array)
-                        {
-                            try
-                            {
-                                var elements = JsonSerializer.Deserialize<List<JsonElement>>(response.Result.GetRawText());
-                                RoutineCallDataTableResult = ConvertJsonElementsToDataTable(elements);
-                                RoutineCallResult = $"Табличный результат показан ниже. ({elements?.Count ?? 0} строк)";
-                            }
-                            catch (Exception ex)
-                            {
-                                RoutineCallResult = $"Ошибка преобразования табличного результата: {ex.Message}\nИсходный JSON:\n{JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true })}";
-                                RoutineCallDataTableResult = null;
-                            }
-                        }
-                        else
-                        {
-                            RoutineCallResult = $"Ожидался массив для табличного результата, но получен {response.Result.ValueKind}.\nИсходный JSON:\n{JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true })}";
-                            RoutineCallDataTableResult = null;
-                        }
+                        var elements = JsonSerializer.Deserialize<List<JsonElement>>(response.Result.GetRawText());
+                        RoutineCallDataTableResult = ConvertJsonElementsToDataTable(elements);
+                        RoutineCallResult = $"Табличный результат показан ниже. ({elements?.Count ?? 0} строк)";
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        RoutineCallResult = JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true });
+                        RoutineCallResult = $"Ошибка преобразования табличного результата: {ex.Message}\nИсходный JSON:\n{JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
                         RoutineCallDataTableResult = null;
+                    }
+                }
+                else if (response.Result.ValueKind != JsonValueKind.Undefined && response.Result.ValueKind != JsonValueKind.Null)
+                {
+                    RoutineCallResult = JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+                    RoutineCallDataTableResult = null;
+                    if (isFunctionReturningTable) // It was expected to be a table but wasn't an array
+                    {
+                        RoutineCallResult = $"Ожидался массив для табличного результата, но получен {response.Result.ValueKind}.\nРезультат:\n{RoutineCallResult}";
                     }
                 }
                 else if (!string.IsNullOrEmpty(response.Status))
@@ -548,21 +557,15 @@ namespace ApiManagerApp.ViewModels
                     RoutineCallResult = $"Статус: {response.Status}";
                     if (response.ArgsUsed != null && response.ArgsUsed.Any())
                     {
-                        RoutineCallResult += $"\nИспользованные аргументы: {JsonSerializer.Serialize(response.ArgsUsed, new JsonSerializerOptions { WriteIndented = true })}";
+                        RoutineCallResult += $"\nИспользованные аргументы: {JsonSerializer.Serialize(response.ArgsUsed, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
                     }
                     RoutineCallDataTableResult = null;
                 }
                 else
                 {
-                    RoutineCallResult = "Подпрограмма выполнена. Данных или статуса не возвращено.";
+                    RoutineCallResult = "Подпрограмма выполнена. Данных или статуса не возвращено в теле ответа.";
                     RoutineCallDataTableResult = null;
                 }
-            }
-            else
-            {
-                ApiStatusMessage = $"Ошибка вызова {routineType} {SelectedRoutineName}: {errorMessage}";
-                RoutineCallResult = $"Ошибка: {errorMessage}";
-                RoutineCallDataTableResult = null;
             }
         }
 
@@ -580,7 +583,7 @@ namespace ApiManagerApp.ViewModels
             }
             else
             {
-                if (latency > TimeSpan.Zero || (errorMessage?.Contains("timed out") ?? false))
+                if (latency > TimeSpan.Zero || (errorMessage?.Contains("timed out") ?? false) || (errorMessage?.Contains("Тайм-аут") ?? false)) // Added "Тайм-аут" for localized timeout message
                 {
                     HealthStatus = $"Проверка соединения завершилась ошибкой: {errorMessage}{latencyString}";
                 }
@@ -687,6 +690,7 @@ namespace ApiManagerApp.ViewModels
             }
         }
 
+        // This method also needs to be updated similarly to ExecuteCallSelectedRoutineAsync
         private async Task ExecuteCallRoutineAsync(string routineType)
         {
             if (string.IsNullOrWhiteSpace(SelectedRoutineName))
@@ -697,7 +701,7 @@ namespace ApiManagerApp.ViewModels
             }
 
             ApiStatusMessage = $"Вызов {routineType} {SelectedRoutineName}...";
-            RoutineCallResult = "";
+            RoutineCallResult = ""; // Clear previous result
 
             RoutineCallArgs payload = new RoutineCallArgs();
             try
@@ -722,40 +726,43 @@ namespace ApiManagerApp.ViewModels
             {
                 ApiStatusMessage = $"Предупреждение: Не удалось разобрать аргументы как JSON-массив: {jsonEx.Message}. Отправка пустых аргументов.";
                 RoutineCallResult = $"Ошибка разбора аргументов: {jsonEx.Message}";
+                // Consider if we should proceed or return
             }
-            catch (Exception ex)
+            catch (Exception ex) // Catch other argument parsing errors
             {
-                ApiStatusMessage = $"Ошибка разбора аргументов: {ex.Message}";
-                RoutineCallResult = $"Ошибка разбора аргументов: {ex.Message}";
+                ApiStatusMessage = $"Ошибка подготовки аргументов: {ex.Message}";
+                RoutineCallResult = $"Ошибка подготовки аргументов: {ex.Message}";
                 return;
             }
 
             var (response, errorMessage) = await _apiService.CallRoutineAsync(routineType, SelectedRoutineName, payload);
 
-            if (response != null)
+            if (!string.IsNullOrEmpty(errorMessage)) // Prioritize error message from ApiService
             {
-                ApiStatusMessage = $"{routineType} '{SelectedRoutineName}' успешно вызвана.";
+                ApiStatusMessage = $"Ошибка вызова {routineType} {SelectedRoutineName}.";
+                RoutineCallResult = errorMessage; // This contains the detailed error from ApiService
+            }
+            else // No direct API call error, process the response content (response object is guaranteed non-null)
+            {
+                ApiStatusMessage = $"{routineType} '{SelectedRoutineName}' вызвана, ответ от API получен.";
+
                 if (response.Result.ValueKind != JsonValueKind.Undefined && response.Result.ValueKind != JsonValueKind.Null)
                 {
-                    RoutineCallResult = JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true });
+                    RoutineCallResult = JsonSerializer.Serialize(response.Result, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
                 }
                 else if (!string.IsNullOrEmpty(response.Status))
                 {
                     RoutineCallResult = $"Статус: {response.Status}";
                     if (response.ArgsUsed != null && response.ArgsUsed.Any())
                     {
-                        RoutineCallResult += $"\nИспользованные аргументы: {JsonSerializer.Serialize(response.ArgsUsed, new JsonSerializerOptions { WriteIndented = true })}";
+                        RoutineCallResult += $"\nИспользованные аргументы: {JsonSerializer.Serialize(response.ArgsUsed, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
                     }
                 }
                 else
                 {
-                    RoutineCallResult = "Подпрограмма выполнена. Специфичных данных или статуса в ожидаемом формате не возвращено.";
+                    // This is for procedures that complete without returning a specific result or status in the JSON body
+                    RoutineCallResult = "Подпрограмма выполнена. Данных или статуса не возвращено в теле ответа.";
                 }
-            }
-            else
-            {
-                ApiStatusMessage = $"Ошибка вызова {routineType} {SelectedRoutineName}: {errorMessage}";
-                RoutineCallResult = $"Ошибка: {errorMessage}";
             }
         }
 
@@ -784,7 +791,7 @@ namespace ApiManagerApp.ViewModels
                 filtersDict
             );
 
-            if (response != null && response.Data != null)
+            if (response != null && response.Data != null) // Check response and response.Data
             {
                 DataQueryTotalCount = response.TotalCount;
                 DataQueryOffset = response.Offset;
@@ -792,11 +799,18 @@ namespace ApiManagerApp.ViewModels
                 QueriedDataTable = ConvertJsonElementsToDataTable(response.Data);
                 ApiStatusMessage = $"Данные загружены из {DataQueryTableName}. Показано {response.Data.Count} из {response.TotalCount} элементов. (Смещение: {response.Offset}, Лимит: {response.Limit})";
             }
-            else
+            else // Handle error or empty response
             {
                 DataQueryTotalCount = 0;
-                ApiStatusMessage = $"Ошибка запроса данных из {DataQueryTableName}: {errorMessage}";
-                MessageBox.Show($"Не удалось запросить данные: {errorMessage}", "Ошибка запроса данных", MessageBoxButton.OK, MessageBoxImage.Error);
+                // If errorMessage is present, use it. Otherwise, a generic message.
+                ApiStatusMessage = !string.IsNullOrEmpty(errorMessage)
+                    ? $"Ошибка запроса данных из {DataQueryTableName}: {errorMessage}"
+                    : $"Данные из {DataQueryTableName} не получены или ответ пуст.";
+
+                if (!string.IsNullOrEmpty(errorMessage)) // Show MessageBox only on actual error
+                {
+                    MessageBox.Show($"Не удалось запросить данные: {errorMessage}", "Ошибка запроса данных", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
             UpdatePaginationCommands();
         }
@@ -805,7 +819,7 @@ namespace ApiManagerApp.ViewModels
         {
             if (string.IsNullOrWhiteSpace(DataByColumnTableName) ||
                string.IsNullOrWhiteSpace(DataByColumnName) ||
-               DataByColumnValue == null)
+               DataByColumnValue == null) // DataByColumnValue can be an empty string, so null check is important
             {
                 ApiStatusMessage = "Пожалуйста, заполните все обязательные поля для 'Чтения по значению столбца'.";
                 QueriedByColumnDataTable = null;
@@ -820,15 +834,22 @@ namespace ApiManagerApp.ViewModels
                 DataByColumnValue
             );
 
-            if (items != null)
+            // items can be an empty list on success, or null on error (though ApiService tries to return empty list on error too)
+            if (!string.IsNullOrEmpty(errorMessage))
+            {
+                ApiStatusMessage = $"Ошибка запроса данных по столбцу: {errorMessage}";
+                MessageBox.Show($"Не удалось запросить данные по столбцу: {errorMessage}", "Ошибка запроса данных", MessageBoxButton.OK, MessageBoxImage.Error);
+                QueriedByColumnDataTable = null; // Ensure table is cleared
+            }
+            else if (items != null) // items is not null and no error message
             {
                 QueriedByColumnDataTable = ConvertJsonElementsToDataTable(items);
                 ApiStatusMessage = $"Данные загружены из {DataByColumnTableName}, где {DataByColumnName} = '{DataByColumnValue}'. Найдено {items.Count} элементов.";
             }
-            else
+            else // Should not happen if ApiService always returns non-null items or an error message
             {
-                ApiStatusMessage = $"Ошибка запроса данных по столбцу: {errorMessage}";
-                MessageBox.Show($"Не удалось запросить данные по столбцу: {errorMessage}", "Ошибка запроса данных", MessageBoxButton.OK, MessageBoxImage.Error);
+                ApiStatusMessage = "Неожиданный ответ от API при запросе данных по столбцу.";
+                QueriedByColumnDataTable = null;
             }
         }
 
@@ -845,13 +866,23 @@ namespace ApiManagerApp.ViewModels
             {
                 foreach (var property in firstElement.EnumerateObject())
                 {
-                    Type columnType = typeof(object);
-                    dataTable.Columns.Add(property.Name, columnType);
+                    // Determine column type based on the first row's data for more specific typing if possible
+                    // For simplicity, keeping as object, or inferring basic types
+                    Type columnType = GetTypeFromJsonElement(property.Value);
+                    try
+                    {
+                        dataTable.Columns.Add(property.Name, columnType);
+                    }
+                    catch (DuplicateNameException)
+                    {
+                        // Handle duplicate column names if necessary, though rare from structured JSON
+                        // For now, we assume unique property names in the first object
+                    }
                 }
             }
-            else
+            else // If elements are not objects (e.g., list of strings, numbers)
             {
-                dataTable.Columns.Add("Значение", typeof(string));
+                dataTable.Columns.Add("Значение", GetTypeFromJsonElement(firstElement));
             }
 
             foreach (var element in elements)
@@ -863,22 +894,15 @@ namespace ApiManagerApp.ViewModels
                     {
                         if (dataTable.Columns.Contains(property.Name))
                         {
-                            if (property.Value.ValueKind == JsonValueKind.Null)
-                            {
-                                row[property.Name] = DBNull.Value;
-                            }
-                            else
-                            {
-                                row[property.Name] = GetValueFromJsonElement(property.Value);
-                            }
+                            row[property.Name] = GetValueFromJsonElement(property.Value) ?? DBNull.Value;
                         }
                     }
                 }
-                else
+                else // For non-object elements
                 {
                     if (dataTable.Columns.Contains("Значение"))
                     {
-                        row["Значение"] = GetValueFromJsonElement(element);
+                        row["Значение"] = GetValueFromJsonElement(element) ?? DBNull.Value;
                     }
                 }
                 dataTable.Rows.Add(row);
@@ -886,27 +910,50 @@ namespace ApiManagerApp.ViewModels
             return dataTable;
         }
 
-        private object GetValueFromJsonElement(JsonElement jsonElement)
+        private Type GetTypeFromJsonElement(JsonElement jsonElement)
         {
             switch (jsonElement.ValueKind)
             {
                 case JsonValueKind.String:
-                    return jsonElement.GetString() ?? string.Empty;
+                    return typeof(string);
+                case JsonValueKind.Number:
+                    if (jsonElement.TryGetInt64(out _)) return typeof(long);
+                    if (jsonElement.TryGetDouble(out _)) return typeof(double);
+                    return typeof(string); // Fallback for numbers that don't fit
+                case JsonValueKind.True:
+                case JsonValueKind.False:
+                    return typeof(bool);
+                case JsonValueKind.Null:
+                    return typeof(object); // Or handle as nullable of a default type
+                default:
+                    return typeof(string); // For arrays, objects, undefined - represent as string
+            }
+        }
+
+
+        private object? GetValueFromJsonElement(JsonElement jsonElement) // Return type changed to object?
+        {
+            switch (jsonElement.ValueKind)
+            {
+                case JsonValueKind.String:
+                    return jsonElement.GetString(); // Nullable if JSON string is null, though ValueKind.Null is separate
                 case JsonValueKind.Number:
                     if (jsonElement.TryGetInt64(out long l)) return l;
                     if (jsonElement.TryGetDouble(out double d)) return d;
+                    // If it's a number but can't be parsed into long/double (e.g. very large decimal), return as string
                     return jsonElement.GetRawText();
                 case JsonValueKind.True:
                     return true;
                 case JsonValueKind.False:
                     return false;
                 case JsonValueKind.Null:
-                    return DBNull.Value;
+                    return DBNull.Value; // For DataTable compatibility
                 case JsonValueKind.Object:
                 case JsonValueKind.Array:
+                    // Serialize complex types back to string for display in a simple DataTable cell
                     return jsonElement.ToString();
-                default:
-                    return jsonElement.ToString();
+                default: // JsonValueKind.Undefined or any other
+                    return jsonElement.ToString(); // Fallback
             }
         }
 
@@ -928,8 +975,10 @@ namespace ApiManagerApp.ViewModels
                     (LoadTableSchemaCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     break;
                 case nameof(SelectedRoutineItem):
-                case nameof(SelectedRoutineName): // Добавил SelectedRoutineName для обновления команды
+                case nameof(SelectedRoutineName):
                     (CallSelectedRoutineCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    (CallProcedureCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                    (CallFunctionCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     Debug.WriteLine($"SelectedRoutineName изменено на: {SelectedRoutineName}");
                     break;
                 case nameof(DataQueryTableName):
@@ -946,7 +995,7 @@ namespace ApiManagerApp.ViewModels
                 case nameof(QueriedDataTable):
                     UpdatePaginationCommands();
                     break;
-                case nameof(ApiUsername): // Обновляем команду при изменении имени пользователя
+                case nameof(ApiUsername):
                     (ApplyApiCredentialsCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     break;
             }
