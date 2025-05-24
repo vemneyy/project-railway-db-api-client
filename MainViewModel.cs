@@ -94,37 +94,36 @@ namespace ApiManagerApp.ViewModels
         }
         
 
-        private string _selectedRoutineName;
-        public string SelectedRoutineName
+        private string? _selectedRoutineName;
+        public string? SelectedRoutineName
         {
             get => _selectedRoutineName;
             set { _selectedRoutineName = value; OnPropertyChanged(); }
         }
 
-        private string _routineArgumentsInput;
-        public string RoutineArgumentsInput
+        private string? _routineArgumentsInput;
+        public string? RoutineArgumentsInput
         {
             get => _routineArgumentsInput;
             set { _routineArgumentsInput = value; OnPropertyChanged(); }
         }
 
-        private string _routineCallResult;
-        public string RoutineCallResult
+        private string? _routineCallResult;
+        public string? RoutineCallResult
         {
             get => _routineCallResult;
             set { _routineCallResult = value; OnPropertyChanged(); }
         }
 
-        private string _apiStatusMessage;
-        public string ApiStatusMessage
+        private string? _apiStatusMessage;
+        public string? ApiStatusMessage
         {
             get => _apiStatusMessage;
             set { _apiStatusMessage = value; OnPropertyChanged(); }
         }
 
-        // Свойства для чтения данных (общий запрос)
-        private string _dataQueryTableName;
-        public string DataQueryTableName
+        private string? _dataQueryTableName;
+        public string? DataQueryTableName
         {
             get => _dataQueryTableName;
             set { _dataQueryTableName = value; OnPropertyChanged(); }
@@ -200,8 +199,8 @@ namespace ApiManagerApp.ViewModels
             set { _queriedByColumnDataTable = value; OnPropertyChanged(); }
         }
 
-        private DataTable _routineCallDataTableResult; // Новое свойство для табличного результата
-        public DataTable RoutineCallDataTableResult
+        private DataTable? _routineCallDataTableResult; // Новое свойство для табличного результата
+        public DataTable? RoutineCallDataTableResult
         {
             get => _routineCallDataTableResult;
             set { SetProperty(ref _routineCallDataTableResult, value); }
@@ -255,11 +254,22 @@ namespace ApiManagerApp.ViewModels
         public ICommand SelectRoutineCommand { get; }
         public ICommand CallSelectedRoutineCommand { get; }
 
+        // Fix for CS8618: Initialize non-nullable fields and properties in the constructor.
+
         public MainViewModel()
         {
-            _apiService = new ApiService(); // Использует URL по умолчанию из ApiService
-            HealthStatus = "Click 'Check Health' to get status.";
-            ApiStatusMessage = "Ready";
+            _apiService = new ApiService(); // Uses default URL from ApiService
+            _healthStatus = "Нажмите чтобы получить статус API."; // Initialize _healthStatus
+            _selectedTableNameForSchema = string.Empty; // Initialize _selectedTableNameForSchema
+            _dataQuerySortBy = string.Empty; // Initialize _dataQuerySortBy
+            _dataQueryFields = string.Empty; // Initialize _dataQueryFields
+            _dataByColumnTableName = string.Empty;
+            _dataByColumnName = string.Empty;
+            _dataByColumnValue = string.Empty;
+            _selectedRoutineItem = new object(); 
+            SelectRoutineCommand = new RelayCommand(param => { /* Command logic */ }, param => true);
+
+            ApiStatusMessage = "Готово";
             RoutineArgumentsInput = "[]";
             DataQueryTableName = "";
             DataByColumnTableName = "";
@@ -283,7 +293,7 @@ namespace ApiManagerApp.ViewModels
             ReadDataByColumnCommand = new RelayCommand(async param => await ExecuteReadDataByColumnAsync(),
                                                        param => !string.IsNullOrWhiteSpace(DataByColumnTableName) &&
                                                                 !string.IsNullOrWhiteSpace(DataByColumnName) &&
-                                                                DataByColumnValue != null); // Разрешаем пустую строку для значения
+                                                                DataByColumnValue != null); // Allow empty string for value
             NextPageCommand = new RelayCommand(async param => { DataQueryOffset += DataQueryLimit; await ExecuteReadDataAsync(); },
                                                param => QueriedDataTable != null && (DataQueryOffset + DataQueryLimit) < DataQueryTotalCount);
             PreviousPageCommand = new RelayCommand(async param => { DataQueryOffset = Math.Max(0, DataQueryOffset - DataQueryLimit); await ExecuteReadDataAsync(); },
@@ -297,12 +307,23 @@ namespace ApiManagerApp.ViewModels
 
         private void GenerateExamplePayloadForProcedure(ProcedureInfo proc)
         {
-            GeneratePayload(proc?.ArgumentsSignature);
-        }
+            if (proc == null || string.IsNullOrWhiteSpace(proc.ArgumentsSignature))
+            {
+                RoutineArgumentsInput = "[]";
+                return;
+            }
 
+            GeneratePayload(proc.ArgumentsSignature);
+        }
         private void GenerateExamplePayloadForFunction(FunctionInfo func)
         {
-            GeneratePayload(func?.ArgumentsSignature);
+            if (func == null || string.IsNullOrWhiteSpace(func.ArgumentsSignature))
+            {
+                RoutineArgumentsInput = "[]";
+                return;
+            }
+
+            GeneratePayload(func.ArgumentsSignature);
         }
 
         private void GeneratePayload(string argumentsSignature)
@@ -550,17 +571,17 @@ namespace ApiManagerApp.ViewModels
 
             if (healthInfo != null)
             {
-                HealthStatus = $"API статус: {healthInfo.Status}, DB соединение: {healthInfo.Database_Connection}{latencyString}";
+                HealthStatus = $"API статус: {healthInfo.Status}, DB соединение: {healthInfo.DatabaseConnection}{latencyString}";
                 ApiStatusMessage = "Проверка соединения успешна.";
             }
             else
             {
                 // Если ошибка, но задержка была измерена (например, сервер ответил ошибкой)
-                if (latency > TimeSpan.Zero || errorMessage.Contains("timed out"))
+                if (latency > TimeSpan.Zero || (errorMessage?.Contains("timed out") ?? false)) 
                 {
                     HealthStatus = $"Проверка соединения завершилась ошибкой: {errorMessage}{latencyString}";
                 }
-                else // Если ошибка произошла до установления соединения (например, DNS resolving failed)
+                else 
                 {
                     HealthStatus = $"Проверка соединения завершилась ошибкой: {errorMessage}";
                 }
@@ -569,7 +590,7 @@ namespace ApiManagerApp.ViewModels
         }
 
 
-        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
+        protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
         {
             if (Equals(storage, value)) return false;
             storage = value;
@@ -821,7 +842,7 @@ namespace ApiManagerApp.ViewModels
             }
         }
 
-        private DataTable ConvertJsonElementsToDataTable(List<JsonElement> elements)
+        private DataTable ConvertJsonElementsToDataTable(List<JsonElement>? elements)
         {
             var dataTable = new DataTable();
             if (elements == null || !elements.Any())
@@ -834,11 +855,7 @@ namespace ApiManagerApp.ViewModels
             {
                 foreach (var property in firstElement.EnumerateObject())
                 {
-                    Type columnType = typeof(object); // По умолчанию object, чтобы избежать ошибок преобразования
-                    // Можно добавить более точное определение типа, если это критично
-                    // if (property.Value.ValueKind == JsonValueKind.Number) columnType = typeof(double);
-                    // else if (property.Value.ValueKind == JsonValueKind.True || property.Value.ValueKind == JsonValueKind.False) columnType = typeof(bool);
-                    // else columnType = typeof(string); // По умолчанию строка для всего остального
+                    Type columnType = typeof(object); // Default to object to avoid conversion errors
                     dataTable.Columns.Add(property.Name, columnType);
                 }
             }
@@ -862,9 +879,6 @@ namespace ApiManagerApp.ViewModels
                             }
                             else
                             {
-                                // Простое присваивание, DataGrid попытается отобразить как строку, если тип object
-                                // Для более точного отображения типов (числа, даты) можно оставить логику определения типа колонки выше
-                                // или реализовать IValueConverter для DataGrid колонок.
                                 row[property.Name] = GetValueFromJsonElement(property.Value);
                             }
                         }
@@ -887,11 +901,11 @@ namespace ApiManagerApp.ViewModels
             switch (jsonElement.ValueKind)
             {
                 case JsonValueKind.String:
-                    return jsonElement.GetString();
+                    return jsonElement.GetString() ?? string.Empty;
                 case JsonValueKind.Number:
                     if (jsonElement.TryGetInt64(out long l)) return l;
                     if (jsonElement.TryGetDouble(out double d)) return d;
-                    return jsonElement.GetRawText(); // fallback
+                    return jsonElement.GetRawText();
                 case JsonValueKind.True:
                     return true;
                 case JsonValueKind.False:
@@ -914,7 +928,7 @@ namespace ApiManagerApp.ViewModels
 
 
         public event PropertyChangedEventHandler? PropertyChanged;
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 

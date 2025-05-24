@@ -13,22 +13,22 @@ namespace ApiManagerApp.Services
     public class HealthCheckResponse
     {
         [JsonPropertyName("status")]
-        public string Status { get; set; }
+        public string? Status { get; set; }
 
         [JsonPropertyName("database_connection")]
-        public string Database_Connection { get; set; }
+        public string? DatabaseConnection { get; set; }
     }
 
     public class ColumnInfo
     {
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         [JsonPropertyName("type")]
-        public string Type { get; set; }
+        public string? Type { get; set; }
 
         [JsonPropertyName("python_type")]
-        public string PythonType { get; set; }
+        public string? PythonType { get; set; }
 
         [JsonPropertyName("nullable")]
         public bool Nullable { get; set; }
@@ -37,91 +37,91 @@ namespace ApiManagerApp.Services
         public bool PrimaryKey { get; set; }
 
         [JsonPropertyName("default")]
-        public string Default { get; set; }
+        public string? Default { get; set; }
 
         [JsonPropertyName("server_default")]
-        public string ServerDefault { get; set; }
+        public string? ServerDefault { get; set; }
     }
 
     public class ForeignKeyInfo
     {
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         [JsonPropertyName("constrained_columns")]
-        public List<string> ConstrainedColumns { get; set; }
+        public List<string>? ConstrainedColumns { get; set; }
 
         [JsonPropertyName("referred_schema")]
-        public string ReferredSchema { get; set; }
+        public string? ReferredSchema { get; set; }
 
         [JsonPropertyName("referred_table")]
-        public string ReferredTable { get; set; }
+        public string? ReferredTable { get; set; }
 
         [JsonPropertyName("referred_columns")]
-        public List<string> ReferredColumns { get; set; }
+        public List<string>? ReferredColumns { get; set; }
     }
 
     public class PydanticModelsInfo
     {
         [JsonPropertyName("read")]
-        public string Read { get; set; }
+        public string? Read { get; set; }
 
         [JsonPropertyName("create")]
-        public string Create { get; set; }
+        public string? Create { get; set; }
 
         [JsonPropertyName("update")]
-        public string Update { get; set; }
+        public string? Update { get; set; }
     }
 
     public class TableSchemaDetail
     {
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         [JsonPropertyName("db_table_name")]
-        public string DbTableName { get; set; }
+        public string? DbTableName { get; set; }
 
         [JsonPropertyName("db_schema")]
-        public string DbSchema { get; set; }
+        public string? DbSchema { get; set; }
 
         [JsonPropertyName("is_view")]
         public bool IsView { get; set; }
 
         [JsonPropertyName("columns")]
-        public List<ColumnInfo> Columns { get; set; }
+        public List<ColumnInfo>? Columns { get; set; }
 
         [JsonPropertyName("primary_keys")]
-        public List<string> PrimaryKeys { get; set; }
+        public List<string>? PrimaryKeys { get; set; }
 
         [JsonPropertyName("foreign_keys")]
-        public List<ForeignKeyInfo> ForeignKeys { get; set; }
+        public List<ForeignKeyInfo>? ForeignKeys { get; set; }
 
         [JsonPropertyName("pydantic_models")]
-        public PydanticModelsInfo PydanticModels { get; set; }
+        public PydanticModelsInfo? PydanticModels { get; set; }
     }
 
     public class ProcedureInfo
     {
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         [JsonPropertyName("arguments_signature")]
-        public string ArgumentsSignature { get; set; }
+        public string? ArgumentsSignature { get; set; }
     }
 
     public class FunctionInfo
     {
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         [JsonPropertyName("return_type")]
-        public string ReturnType { get; set; }
+        public string? ReturnType { get; set; }
 
         [JsonPropertyName("arguments_signature")]
-        public string ArgumentsSignature { get; set; }
+        public string? ArgumentsSignature { get; set; }
 
         [JsonPropertyName("precise_return_type")]
-        public string PreciseReturnType { get; set; }
+        public string? PreciseReturnType { get; set; }
     }
 
     public class RoutineCallArgs
@@ -136,16 +136,16 @@ namespace ApiManagerApp.Services
     public class RoutineCallResponse
     {
         [JsonPropertyName("status")]
-        public string Status { get; set; }
+        public string? Status { get; set; }
 
         [JsonPropertyName("procedure")]
-        public string Procedure { get; set; }
+        public string? Procedure { get; set; }
 
         [JsonPropertyName("function")]
-        public string Function { get; set; }
+        public string? Function { get; set; }
 
         [JsonPropertyName("args_used")]
-        public List<object> ArgsUsed { get; set; }
+        public List<object>? ArgsUsed { get; set; }
 
         [JsonPropertyName("result")]
         public JsonElement Result { get; set; }
@@ -163,7 +163,7 @@ namespace ApiManagerApp.Services
         public int Offset { get; set; }
 
         [JsonPropertyName("data")]
-        public List<T> Data { get; set; }
+        public List<T>? Data { get; set; }
     }
 
     public class ApiService
@@ -172,7 +172,7 @@ namespace ApiManagerApp.Services
         private readonly string _baseUrl = "https://api.desperatio.com";
         private readonly JsonSerializerOptions _jsonSerializerOptions;
 
-        public ApiService(string baseUrl = null)
+        public ApiService(string? baseUrl = null)
         {
             if (!string.IsNullOrEmpty(baseUrl))
             {
@@ -193,7 +193,7 @@ namespace ApiManagerApp.Services
             };
         }
 
-        private async Task<(T ResponseBody, string ErrorMessage)> GetAsync<T>(string requestUri)
+        private async Task<(T? ResponseBody, string? ErrorMessage)> GetAsync<T>(string requestUri)
         {
             try
             {
@@ -230,7 +230,7 @@ namespace ApiManagerApp.Services
             }
         }
 
-        private async Task<(T ResponseBody, string ErrorMessage)> PostAsync<T>(string requestUri, object payload)
+        private async Task<(T? ResponseBody, string? ErrorMessage)> PostAsync<T>(string requestUri, object payload)
         {
             try
             {
@@ -326,20 +326,20 @@ namespace ApiManagerApp.Services
         public class FastApiValidationError
         {
             [JsonPropertyName("loc")]
-            public List<object> Loc { get; set; }
+            public List<object>? Loc { get; set; }
             [JsonPropertyName("msg")]
-            public string Msg { get; set; }
+            public string? Msg { get; set; }
             [JsonPropertyName("type")]
-            public string Type { get; set; }
+            public string? Type { get; set; }
         }
         public class FastApiValidationErrorWrapper
         {
             [JsonPropertyName("detail")]
-            public List<FastApiValidationError> Detail { get; set; }
+            public List<FastApiValidationError>? Detail { get; set; }
         }
 
 
-        public async Task<(HealthCheckResponse HealthInfo, TimeSpan Latency, string ErrorMessage)> CheckHealthAsyncWithLatency()
+        public async Task<(HealthCheckResponse? HealthInfo, TimeSpan Latency, string? ErrorMessage)> CheckHealthAsyncWithLatency()
         {
             var stopwatch = new Stopwatch();
             try
@@ -353,7 +353,6 @@ namespace ApiManagerApp.Services
                 Debug.WriteLine($"GET /health статус ответа: {response.StatusCode}");
                 Debug.WriteLine($"GET /health тело ответа: {responseString}");
                 Debug.WriteLine($"GET /health задержка: {stopwatch.ElapsedMilliseconds} мс");
-
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -392,35 +391,39 @@ namespace ApiManagerApp.Services
             return await Task.FromResult(FormatError(response, responseString));
         }
 
-        public async Task<(List<string> Tables, string ErrorMessage)> GetTablesAsync()
+        public async Task<(List<string>? Tables, string? ErrorMessage)> GetTablesAsync()
         {
             return await GetAsync<List<string>>("/schema/tables");
         }
 
-        public async Task<(List<string> Views, string ErrorMessage)> GetViewsAsync()
+        public async Task<(List<string>? Views, string? ErrorMessage)> GetViewsAsync()
         {
             return await GetAsync<List<string>>("/schema/views");
         }
 
-        public async Task<(TableSchemaDetail Schema, string ErrorMessage)> GetTableOrViewSchemaAsync(string name)
+        public async Task<(TableSchemaDetail? Schema, string ErrorMessage)> GetTableOrViewSchemaAsync(string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) return (null, "Имя таблицы/представления не может быть пустым.");
-            return await GetAsync<TableSchemaDetail>($"/schema/table/{Uri.EscapeDataString(name)}");
+            if (string.IsNullOrWhiteSpace(name))
+                return (null, "Имя таблицы/представления не может быть пустым.");
+
+            var (responseBody, errorMessage) = await GetAsync<TableSchemaDetail>($"/schema/table/{Uri.EscapeDataString(name)}");
+            return (responseBody, errorMessage ?? string.Empty);
         }
 
-        public async Task<(List<ProcedureInfo> Procedures, string ErrorMessage)> GetProceduresAsync()
+        public async Task<(List<ProcedureInfo>? Procedures, string? ErrorMessage)> GetProceduresAsync()
         {
             return await GetAsync<List<ProcedureInfo>>("/schema/procedures");
         }
 
-        public async Task<(List<FunctionInfo> Functions, string ErrorMessage)> GetFunctionsAsync()
+        public async Task<(List<FunctionInfo>? Functions, string? ErrorMessage)> GetFunctionsAsync()
         {
             return await GetAsync<List<FunctionInfo>>("/schema/functions");
         }
 
         public async Task<(RoutineCallResponse Response, string ErrorMessage)> CallRoutineAsync(string routineType, string routineName, RoutineCallArgs payload)
         {
-            if (string.IsNullOrWhiteSpace(routineName)) return (null, "Имя рутины не может быть пустым.");
+            if (string.IsNullOrWhiteSpace(routineName))
+                return (new RoutineCallResponse(), "Имя рутины не может быть пустым.");
             payload ??= new RoutineCallArgs();
 
             string endpointPathSegment;
@@ -436,25 +439,27 @@ namespace ApiManagerApp.Services
             }
             else
             {
-                return (null, $"Неизвестный тип рутины: {routineType}");
+                return (new RoutineCallResponse(), $"Неизвестный тип рутины: {routineType}");
             }
 
             string endpoint = $"/routines/{endpointPathSegment}/{Uri.EscapeDataString(routineName)}";
 
-            return await PostAsync<RoutineCallResponse>(endpoint, payload);
+            var (response, errorMessage) = await PostAsync<RoutineCallResponse>(endpoint, payload);
+            return (response ?? new RoutineCallResponse(), errorMessage ?? string.Empty);
         }
 
-        public async Task<(PaginatedDataResponse<JsonElement> Response, string ErrorMessage)> ReadItemsAsync(
+        public async Task<(PaginatedDataResponse<JsonElement>? Response, string? ErrorMessage)> ReadItemsAsync(
             string tableOrViewName,
             int limit = 100,
             int offset = 0,
-            string sortBy = null,
-            string fields = null,
-            Dictionary<string, string> filters = null)
+            string? sortBy = null,
+            string? fields = null,
+            Dictionary<string, string>? filters = null)
         {
-            if (string.IsNullOrWhiteSpace(tableOrViewName)) return (null, "Имя таблицы/представления не может быть пустым.");
+            if (string.IsNullOrWhiteSpace(tableOrViewName))
+                return (null, "Имя таблицы/представления не может быть пустым.");
 
-            var queryParams = new Dictionary<string, string>()
+            var queryParams = new Dictionary<string, string?>()
             {
                 { "limit", limit.ToString() },
                 { "offset", offset.ToString() }
@@ -479,16 +484,19 @@ namespace ApiManagerApp.Services
         }
 
         public async Task<(List<JsonElement> Items, string ErrorMessage)> ReadItemsByColumnValueAsync(
-            string tableOrViewName,
-            string columnName,
-            string columnValue)
+           string tableOrViewName,
+           string columnName,
+           string columnValue)
         {
-            if (string.IsNullOrWhiteSpace(tableOrViewName)) return (null, "Имя таблицы/представления не может быть пустым.");
-            if (string.IsNullOrWhiteSpace(columnName)) return (null, "Имя колонки не может быть пустым.");
+            if (string.IsNullOrWhiteSpace(tableOrViewName))
+                return (new List<JsonElement>(), "Имя таблицы/представления не может быть пустым.");
+            if (string.IsNullOrWhiteSpace(columnName))
+                return (new List<JsonElement>(), "Имя колонки не может быть пустым.");
             columnValue ??= string.Empty;
 
             string requestUri = $"/{Uri.EscapeDataString(tableOrViewName)}/column/{Uri.EscapeDataString(columnName)}/{Uri.EscapeDataString(columnValue)}";
-            return await GetAsync<List<JsonElement>>(requestUri);
+            var (items, errorMessage) = await GetAsync<List<JsonElement>>(requestUri);
+            return (items ?? new List<JsonElement>(), errorMessage ?? string.Empty);
         }
     }
 }
