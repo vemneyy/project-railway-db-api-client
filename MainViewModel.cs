@@ -26,6 +26,44 @@ namespace ApiManagerApp.ViewModels
             set { _healthStatus = value; OnPropertyChanged(); }
         }
 
+        private string _apiUsername = "api_user_cashier"; // Значение по умолчанию
+        public string ApiUsername
+        {
+            get => _apiUsername;
+            set { SetProperty(ref _apiUsername, value); }
+        }
+
+        private string _apiPassword = "api_cashier_pass"; // Значение по умолчанию
+        public string ApiPassword // Это свойство будет связано с PasswordBox через Behavior или Attached Property
+        {
+            get => _apiPassword;
+            set { SetProperty(ref _apiPassword, value); }
+        }
+
+        private string? _selectedDbRole;
+        public string? SelectedDbRole
+        {
+            get => _selectedDbRole;
+            set
+            {
+                if (SetProperty(ref _selectedDbRole, value))
+                {
+                    _apiService.SetDatabaseRoleHeader(value); // Устанавливаем заголовок при изменении
+                    ApiStatusMessage = string.IsNullOrWhiteSpace(value)
+                        ? "Роль БД не выбрана (будет использована роль по умолчанию, если возможно)."
+                        : $"Выбрана роль БД: {value}";
+                }
+            }
+        }
+
+        public ObservableCollection<string> AvailableDbRoles { get; } = new ObservableCollection<string>
+        {
+            "cashier", "dispatcher", "analyst", "managment"
+        };
+
+        public ICommand ApplyApiCredentialsCommand { get; }
+        public ICommand ClearApiCredentialsCommand { get; }
+
         public ObservableCollection<string> Tables { get; } = new ObservableCollection<string>();
         public ObservableCollection<string> Views { get; } = new ObservableCollection<string>();
         public ObservableCollection<ProcedureInfo> Procedures { get; } = new ObservableCollection<ProcedureInfo>();
@@ -225,6 +263,14 @@ namespace ApiManagerApp.ViewModels
             DataQueryTableName = "";
             DataByColumnTableName = "";
 
+            _apiService.SetCredentials(_apiUsername, _apiPassword);
+
+            ApplyApiCredentialsCommand = new RelayCommand(
+                param => ExecuteApplyApiCredentials(),
+                param => !string.IsNullOrWhiteSpace(ApiUsername) // Пароль проверяется при выполнении
+            );
+            ClearApiCredentialsCommand = new RelayCommand(param => ExecuteClearApiCredentials());
+
             CheckHealthCommand = new RelayCommand(async param => await ExecuteCheckHealthAsync(), param => true);
             LoadTablesCommand = new RelayCommand(async param => await ExecuteLoadTablesAsync(), param => true);
             LoadViewsCommand = new RelayCommand(async param => await ExecuteLoadViewsAsync(), param => true);
@@ -251,6 +297,27 @@ namespace ApiManagerApp.ViewModels
                async param => await ExecuteCallSelectedRoutineAsync(),
                param => SelectedRoutineItem != null && !string.IsNullOrWhiteSpace(SelectedRoutineName)
            );
+        }
+
+        private void ExecuteApplyApiCredentials()
+        {
+            // В реальном приложении пароль нужно получать из PasswordBox более безопасным способом
+            if (string.IsNullOrWhiteSpace(ApiPassword))
+            {
+                ApiStatusMessage = "Пароль API не может быть пустым.";
+                MessageBox.Show("Пароль API не может быть пустым.", "Ошибка учетных данных", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            _apiService.SetCredentials(ApiUsername, ApiPassword); // ApiPassword здесь из свойства
+            ApiStatusMessage = $"Учетные данные API установлены для пользователя '{ApiUsername}'.";
+        }
+
+        private void ExecuteClearApiCredentials()
+        {
+            _apiService.ClearCredentials();
+            ApiUsername = string.Empty; // Очищаем поля в UI
+            ApiPassword = string.Empty; // Очищаем поля в UI (для PasswordBox это будет сложнее)
+            ApiStatusMessage = "Учетные данные API очищены.";
         }
 
         private void GenerateExamplePayloadForProcedure(ProcedureInfo proc)
@@ -861,7 +928,7 @@ namespace ApiManagerApp.ViewModels
                     (LoadTableSchemaCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     break;
                 case nameof(SelectedRoutineItem):
-                case nameof(SelectedRoutineName):
+                case nameof(SelectedRoutineName): // Добавил SelectedRoutineName для обновления команды
                     (CallSelectedRoutineCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     Debug.WriteLine($"SelectedRoutineName изменено на: {SelectedRoutineName}");
                     break;
@@ -878,6 +945,9 @@ namespace ApiManagerApp.ViewModels
                 case nameof(DataQueryLimit):
                 case nameof(QueriedDataTable):
                     UpdatePaginationCommands();
+                    break;
+                case nameof(ApiUsername): // Обновляем команду при изменении имени пользователя
+                    (ApplyApiCredentialsCommand as RelayCommand)?.RaiseCanExecuteChanged();
                     break;
             }
         }

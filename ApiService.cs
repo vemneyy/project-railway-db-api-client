@@ -15,6 +15,8 @@ namespace ApiManagerApp.Services
         private readonly string _baseUrl = "https://api.desperatio.com";
         private readonly JsonSerializerOptions _jsonSerializerOptions;
 
+        private const string DbRoleHeaderName = "X-Database-Role";
+
         public ApiService(string? baseUrl = null)
         {
             if (!string.IsNullOrEmpty(baseUrl))
@@ -29,11 +31,48 @@ namespace ApiManagerApp.Services
                 new MediaTypeWithQualityHeaderValue("application/json"));
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
 
-
             _jsonSerializerOptions = new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true
+                PropertyNameCaseInsensitive = true,
+                // Для корректной сериализации русских символов в JSON ответах (если нужно)
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             };
+        }
+
+        public void SetCredentials(string username, string password)
+        {
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            {
+                _httpClient.DefaultRequestHeaders.Authorization = null;
+                Debug.WriteLine("Учетные данные API сброшены.");
+            }
+            else
+            {
+                var byteArray = Encoding.ASCII.GetBytes($"{username}:{password}");
+                _httpClient.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+                Debug.WriteLine($"Установлены учетные данные API для пользователя: {username}");
+            }
+        }
+
+        public void ClearCredentials()
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+            Debug.WriteLine("Учетные данные API очищены.");
+        }
+
+        public void SetDatabaseRoleHeader(string? dbRole)
+        {
+            _httpClient.DefaultRequestHeaders.Remove(DbRoleHeaderName); // Удаляем старый, если был
+            if (!string.IsNullOrWhiteSpace(dbRole))
+            {
+                _httpClient.DefaultRequestHeaders.Add(DbRoleHeaderName, dbRole);
+                Debug.WriteLine($"Установлен заголовок {DbRoleHeaderName}: {dbRole}");
+            }
+            else
+            {
+                Debug.WriteLine($"Заголовок {DbRoleHeaderName} очищен.");
+            }
         }
 
         private string FormatError(HttpResponseMessage response, string responseString)
@@ -57,6 +96,7 @@ namespace ApiManagerApp.Services
                     return $"{baseError}\nДетали валидации:\n{string.Join("\n", errorMessages)}";
                 }
 
+                // Попытка десериализовать как стандартный ответ с ошибкой FastAPI (словарь с ключом "detail")
                 var errorDetailDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(responseString, _jsonSerializerOptions);
                 if (errorDetailDict != null && errorDetailDict.TryGetValue("detail", out var detailElement))
                 {
@@ -64,21 +104,24 @@ namespace ApiManagerApp.Services
                     {
                         return $"{baseError}\nДетали: {detailElement.GetString()}";
                     }
-                    return $"{baseError}\nДетали (JSON):\n{JsonSerializer.Serialize(detailElement, new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
+                    // Если "detail" не строка, а, например, объект или массив (хотя обычно строка)
+                    return $"{baseError}\nДетали (JSON):\n{JsonSerializer.Serialize(detailElement, _jsonSerializerOptions)}";
                 }
 
-                using (JsonDocument.Parse(responseString))
+                // Если не удалось распознать структуру ошибки, но это валидный JSON
+                using (JsonDocument.Parse(responseString)) // Проверка, что это валидный JSON
                 {
-                    return $"{baseError}\nОтвет сервера (JSON):\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(responseString), new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })}";
+                    // Используем _jsonSerializerOptions, который уже включает Encoder
+                    return $"{baseError}\nОтвет сервера (JSON):\n{JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(responseString), _jsonSerializerOptions)}";
                 }
             }
-            catch (JsonException)
+            catch (JsonException) // Если это не JSON
             {
                 const int maxRawTextLength = 500;
                 string rawText = responseString.Length > maxRawTextLength
                     ? $"{responseString.Substring(0, maxRawTextLength)}..."
                     : responseString;
-                return $"{baseError}\nОтвет сервера (текст):\n{rawText}";
+                return $"{baseError}\nОтвет сервера (не JSON):\n{rawText}";
             }
         }
 
