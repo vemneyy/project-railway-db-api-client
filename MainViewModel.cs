@@ -1,3 +1,4 @@
+using ApiManagerApp.Classes;
 using ApiManagerApp.Services;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -52,7 +53,6 @@ namespace ApiManagerApp.ViewModels
                 }
             }
         }
-
 
         private string? _selectedRoutineName;
         public string? SelectedRoutineName
@@ -163,7 +163,6 @@ namespace ApiManagerApp.ViewModels
             set { SetProperty(ref _routineCallDataTableResult, value); }
         }
 
-
         private object _selectedRoutineItem;
         public object SelectedRoutineItem
         {
@@ -208,7 +207,6 @@ namespace ApiManagerApp.ViewModels
         public ICommand PreviousPageCommand { get; }
         public ICommand SelectRoutineCommand { get; }
         public ICommand CallSelectedRoutineCommand { get; }
-
         public MainViewModel()
         {
             _apiService = new ApiService();
@@ -526,7 +524,6 @@ namespace ApiManagerApp.ViewModels
                 ApiStatusMessage = $"Ошибка: {errorMessage}";
             }
         }
-
 
         protected bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
         {

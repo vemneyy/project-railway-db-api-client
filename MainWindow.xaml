@@ -7,6 +7,7 @@
         xmlns:local="clr-namespace:ApiManagerApp"
         xmlns:viewModels="clr-namespace:ApiManagerApp.ViewModels"
         xmlns:services="clr-namespace:ApiManagerApp.Services"
+        xmlns:classes="clr-namespace:ApiManagerApp.Classes"
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         mc:Ignorable="d"
         Title="Railway DB Client API" Height="800" Width="1200"
@@ -181,7 +182,7 @@
                                     <ItemsControl ItemsSource="{Binding ForeignKeys}"
                                                   Visibility="{Binding ForeignKeys.Count, Converter={StaticResource CountToVisibilityConverter}}">
                                         <ItemsControl.ItemTemplate>
-                                            <DataTemplate DataType="{x:Type services:ForeignKeyInfo}">
+                                            <DataTemplate DataType="{x:Type classes:ForeignKeyInfo}">
                                                 <Border BorderBrush="LightGray" BorderThickness="1" Margin="0,2,0,2" Padding="5">
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Name, StringFormat='Имя ВК: {0}'}" FontWeight="Normal"/>

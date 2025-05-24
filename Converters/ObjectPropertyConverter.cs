@@ -1,7 +1,7 @@
 // Converters/ObjectPropertyConverter.cs
-using ApiManagerApp.Services;
 using System.Globalization;
 using System.Windows.Data;
+using ApiManagerApp.Classes;
 
 namespace ApiManagerApp.Converters
 {
