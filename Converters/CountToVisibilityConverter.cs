@@ -28,10 +28,9 @@ namespace ApiManagerApp.Converters
             return Visibility.Collapsed;
         }
 
-        // Обратное преобразование (из Visibility обратно в количество) не поддерживается
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            throw new NotImplementedException(); // Явное указание на отсутствие обратного преобразования
+            throw new NotImplementedException();
         }
     }
 }

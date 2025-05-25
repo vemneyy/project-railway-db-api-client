@@ -25,10 +25,9 @@ namespace ApiManagerApp.Converters
             return isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        // Обратное преобразование не реализовано, т.к. его выполнение не требуется
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            throw new NotImplementedException(); // Явно указываем, что обратное преобразование не поддерживается
+            throw new NotImplementedException();
         }
     }
 }

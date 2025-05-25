@@ -22,9 +22,6 @@ namespace ApiManagerApp.Converters
             return string.Empty;
         }
 
-        // Метод ConvertBack вызывается при передаче данных из View обратно в ViewModel
-        // Здесь привязка только в одну сторону, поэтому возвращается Binding.DoNothing,
-        // что указывает на то, что обратное преобразование не поддерживается
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
             return Binding.DoNothing;

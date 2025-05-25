@@ -19,11 +19,9 @@ namespace ApiManagerApp.Converters
             // Если значение не является списком строк, возвращаем пустую строку
             return string.Empty;
         }
-
-        // Обратное преобразование от строки к списку строк не реализовано
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            throw new NotImplementedException(); // Явно указываем, что операция не поддерживается
+            throw new NotImplementedException();
         }
     }
 }

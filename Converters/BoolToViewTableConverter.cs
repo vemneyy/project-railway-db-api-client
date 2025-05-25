@@ -21,10 +21,9 @@ namespace ApiManagerApp.Converters
             return "Unknown";
         }
 
-        // Обратное преобразование (из строки в bool) не реализовано
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            throw new NotImplementedException(); // Явно указываем, что обратное преобразование не поддерживается
+            throw new NotImplementedException();
         }
     }
 }
